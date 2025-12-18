@@ -2,11 +2,11 @@
 import { GoogleGenAI } from "@google/genai";
 import { Religion, Language } from '../types';
 
-// Inicialización segura de la IA
 const getAI = () => {
-  const apiKey = process.env.API_KEY;
+  // Intentar obtener la clave de diferentes fuentes posibles
+  const apiKey = process.env.API_KEY || (window as any).process?.env?.API_KEY;
   if (!apiKey) {
-    console.warn("API_KEY no detectada aún en process.env");
+    console.warn("PrayLink: API_KEY no configurada. Las funciones de IA estarán limitadas.");
     return null;
   }
   return new GoogleGenAI({ apiKey });
@@ -19,8 +19,7 @@ export const generateDailyWisdom = async (religion: Religion, language: Language
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Proporciona una reflexión corta, inspiradora y universal (máximo 30 palabras) inspirada en la fe ${religion}. 
-      El texto debe estar en ${language}. No incluyas comillas.`,
+      contents: `Proporciona una reflexión corta, inspiradora y universal (máximo 30 palabras) inspirada en la fe ${religion}. El texto debe estar en ${language}. No incluyas comillas.`,
     });
 
     return response.text || "La paz sea contigo.";
@@ -37,9 +36,7 @@ export const getDailyInspiration = async (religion: Religion, language: Language
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Proporciona un mensaje diario motivador o verso de las tradiciones de ${religion} para hoy. 
-      Debe estar en ${language}. Conciso (menos de 50 palabras). 
-      Formato: "Mensaje/Verso" - Referencia.`,
+      contents: `Proporciona un mensaje diario motivador o verso de las tradiciones de ${religion} para hoy. Debe estar en ${language}. Conciso (menos de 50 palabras). Formato: "Mensaje/Verso" - Referencia.`,
     });
 
     return response.text?.trim() || "Que tu fe te guíe hoy.";
@@ -56,8 +53,7 @@ export const translateText = async (text: string, targetLanguage: Language): Pro
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Traduce el siguiente texto al idioma ${targetLanguage}. Mantén el tono espiritual. 
-      Retorna SOLO el texto traducido: "${text}"`,
+      contents: `Traduce el siguiente texto al idioma ${targetLanguage}. Mantén el tono espiritual. Retorna SOLO el texto traducido: "${text}"`,
     });
 
     return response.text?.trim() || text;
@@ -80,9 +76,7 @@ export const chatWithSpiritualGuide = async (
     const chat = ai.chats.create({
       model: 'gemini-3-flash-preview',
       config: {
-        systemInstruction: `Eres un guía espiritual compasivo y sabio de la tradición ${religion}. 
-        El usuario habla ${language}. Brinda consuelo y referencias filosóficas. 
-        Respuestas de menos de 100 palabras. Sé apoyador y no juzgues.`
+        systemInstruction: `Eres un guía espiritual compasivo y sabio de la tradición ${religion}. El usuario habla ${language}. Brinda consuelo y referencias filosóficas. Respuestas de menos de 100 palabras. Sé apoyador y no juzgues.`
       },
       history: history.map(h => ({
         role: h.role,
