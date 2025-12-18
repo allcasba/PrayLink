@@ -1,0 +1,13 @@
+{
+  "name": "PrayLink",
+  "short_name": "PrayLink",
+  "description": "Multiplica el poder de tu oración uniendo tu fe con el mundo en PrayLink.net",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
