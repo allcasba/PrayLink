@@ -16,62 +16,84 @@ if (USE_REAL_DB) {
   }
 }
 
-const INITIAL_POSTS: Post[] = [
-  {
-    id: 'seed-1',
-    userId: 'u-system',
-    authorName: 'Guía Espiritual',
-    authorReligion: Religion.OTHER,
-    authorAvatarUrl: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=100&h=100&fit=crop',
-    content: 'Bienvenido al Altar Global. Que este espacio sea de bendición para tu vida y la de tus seres queridos.',
-    language: 'Spanish',
-    timestamp: Date.now() - 3600000,
-    likes: 124,
-    prayers: 89,
-    isMiracle: false,
-    promotionTier: PromotionTier.GOLD,
-    gifts: [],
-    comments: []
-  },
-  {
-    id: 'seed-2',
-    userId: 'u-system-2',
-    authorName: 'Maria Gracia',
-    authorReligion: Religion.CHRISTIANITY,
-    authorAvatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop',
-    content: 'Pido oración por la salud de mi abuela que se encuentra en recuperación quirúrgica. Gracias hermanos.',
-    language: 'Spanish',
-    timestamp: Date.now() - 1800000,
-    likes: 45,
-    prayers: 230,
-    isMiracle: true,
-    promotionTier: PromotionTier.PLATINUM,
-    gifts: [],
-    comments: []
-  }
-];
-
 class BackendService {
   private currentUser: User | null = null;
-  private mockPosts: Post[] = [...INITIAL_POSTS];
+  private mockPosts: Post[] = [];
 
-  async login(email: string): Promise<User> {
+  async login(email: string, password?: string): Promise<User> {
     if (USE_REAL_DB && supabase) {
-      const { data, error } = await supabase.from('profiles').select('*, circle:circles(target_id)').eq('email', email).single();
-      if (error || !data) throw new Error("Usuario no encontrado.");
-      const user = this.mapDbUserToUser(data);
-      user.circleIds = data.circle?.map((c: any) => c.target_id) || [];
+      // Intento de login con Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password: password || 'default_pass' 
+      });
+
+      if (authError) throw new Error(authError.message);
+
+      // Cargar el perfil asociado
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*, circle:circles(target_id)')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (profileError) throw new Error("Profile not found");
+
+      const user = this.mapDbUserToUser(profile);
+      user.circleIds = profile.circle?.map((c: any) => c.target_id) || [];
       this.currentUser = user;
       return user;
     }
-    return this.register("Usuario", "Demo", email, Religion.OTHER, Visibility.PUBLIC, "Spanish");
+    
+    // Fallback demo
+    return this.register("User", "Demo", email, Religion.OTHER, Visibility.PUBLIC, "Spanish", "password");
   }
 
   async register(
     firstName: string, lastName: string, email: string, 
-    religion: Religion, visibility: Visibility, language: Language
+    religion: Religion, visibility: Visibility, language: Language,
+    password?: string
   ): Promise<User> {
-    const newUser: User = {
+    
+    if (USE_REAL_DB && supabase) {
+      // 1. Crear usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password: password || 'default_pass'
+      });
+
+      if (authError) throw new Error(authError.message);
+      if (!authData.user) throw new Error("Register failed");
+
+      // 2. Crear perfil en tabla profiles
+      const avatarUrl = `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=random`;
+      const { error: profileError } = await supabase.from('profiles').insert([{
+        id: authData.user.id,
+        email: email,
+        first_name: firstName,
+        last_name: lastName,
+        religion: religion,
+        visibility: visibility,
+        language: language,
+        avatar_url: avatarUrl,
+        is_premium: false
+      }]);
+
+      if (profileError) throw new Error(profileError.message);
+
+      const newUser: User = {
+        id: authData.user.id,
+        name: `${firstName} ${lastName}`,
+        firstName, lastName, email, religion, visibility, language,
+        dateOfBirth: '1990-01-01', nationality: 'Global', gender: 'N/A',
+        avatarUrl, isPremium: false, circleIds: []
+      };
+      this.currentUser = newUser;
+      return newUser;
+    }
+
+    // Mock local
+    const mockUser: User = {
       id: `u${Date.now()}`,
       name: `${firstName} ${lastName}`,
       firstName, lastName, email, religion, visibility, language,
@@ -79,29 +101,21 @@ class BackendService {
       avatarUrl: `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=random`,
       isPremium: false, circleIds: []
     };
-
-    if (USE_REAL_DB && supabase) {
-      await supabase.from('profiles').upsert([{
-        id: newUser.id, email: newUser.email, first_name: newUser.firstName,
-        last_name: newUser.lastName, religion: newUser.religion,
-        visibility: newUser.visibility, language: newUser.language,
-        avatar_url: newUser.avatarUrl
-      }]);
-    }
-    this.currentUser = newUser;
-    return newUser;
+    this.currentUser = mockUser;
+    return mockUser;
   }
 
   async updateProfile(userId: string, data: Partial<User>): Promise<User> {
     if (this.currentUser && this.currentUser.id === userId) {
       this.currentUser = { ...this.currentUser, ...data };
       if (USE_REAL_DB && supabase) {
-        await supabase.from('profiles').update({
+        const { error } = await supabase.from('profiles').update({
           avatar_url: data.avatarUrl,
           first_name: data.firstName,
           last_name: data.lastName,
           language: data.language
         }).eq('id', userId);
+        if (error) console.error("Update DB error:", error);
       }
       return this.currentUser;
     }
@@ -133,11 +147,16 @@ class BackendService {
   async getFeed(viewer: User): Promise<Post[]> {
     if (USE_REAL_DB && supabase) {
       try {
-        const { data } = await supabase.from('posts').select('*, comments(*)').order('promotion_tier', { ascending: false }).order('created_at', { ascending: false });
-        if (data && data.length > 0) {
-          const dbPosts = data.map((p: any) => this.mapDbPostToPost(p));
-          const localOnly = this.mockPosts.filter(mp => !dbPosts.some(dp => dp.id === mp.id));
-          return [...localOnly, ...dbPosts];
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*, comments(*)')
+          .order('promotion_tier', { ascending: false })
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (data) {
+          return data.map((p: any) => this.mapDbPostToPost(p));
         }
       } catch (e) {
         console.error("DB Feed Error", e);
@@ -148,23 +167,40 @@ class BackendService {
 
   async createPost(content: string, user: User, isMiracle: boolean, promotionTier: PromotionTier): Promise<Post> {
     const newPost: Post = {
-      id: `p${Date.now()}`, userId: user.id, authorName: user.name,
-      authorReligion: user.religion, authorAvatarUrl: user.avatarUrl,
-      content, language: user.language, timestamp: Date.now(),
-      likes: 0, prayers: 0, isMiracle, isAnswered: false,
-      promotionTier, gifts: [], comments: []
+      id: `p${Date.now()}`, 
+      userId: user.id, 
+      authorName: user.name,
+      authorReligion: user.religion, 
+      authorAvatarUrl: user.avatarUrl,
+      content, 
+      language: user.language, 
+      timestamp: Date.now(),
+      likes: 0, 
+      prayers: 0, 
+      isMiracle, 
+      isAnswered: false,
+      promotionTier, 
+      gifts: [], 
+      comments: []
     };
 
-    this.mockPosts = [newPost, ...this.mockPosts];
-
     if (USE_REAL_DB && supabase) {
-      await supabase.from('posts').insert([{
-        id: newPost.id, user_id: user.id, author_name: user.name,
-        author_religion: user.religion, author_avatar_url: user.avatarUrl,
-        content: newPost.content, language: newPost.language,
-        is_miracle: newPost.isMiracle, promotion_tier: newPost.promotionTier
+      const { error } = await supabase.from('posts').insert([{
+        id: newPost.id, 
+        user_id: user.id, 
+        author_name: user.name,
+        author_religion: user.religion, 
+        author_avatar_url: user.avatarUrl,
+        content: newPost.content, 
+        language: newPost.language,
+        is_miracle: newPost.isMiracle, 
+        promotion_tier: newPost.promotionTier
       }]);
+      if (error) console.error("Create post error:", error);
+    } else {
+      this.mockPosts = [newPost, ...this.mockPosts];
     }
+    
     return newPost;
   }
 
@@ -189,44 +225,56 @@ class BackendService {
     }
   }
 
-  async addComment(postId: string, content: string, user: User) {
-    const comment = { id: String(Date.now()), userId: user.id, authorName: user.name, authorAvatarUrl: user.avatarUrl, content, timestamp: Date.now() };
-    if (USE_REAL_DB && supabase) {
-      await supabase.from('comments').insert([{ post_id: postId, user_id: user.id, author_name: user.name, author_avatar_url: user.avatarUrl, content }]);
-    }
-    const post = this.mockPosts.find(p => p.id === postId);
-    if (post) post.comments = [...(post.comments || []), comment];
-    return comment;
-  }
-
   private mapDbUserToUser(data: any): User {
     return {
-      id: data.id, name: `${data.first_name} ${data.last_name}`,
-      firstName: data.first_name, lastName: data.last_name, email: data.email,
-      dateOfBirth: data.date_of_birth, nationality: data.nationality, gender: data.gender,
-      religion: data.religion, visibility: data.visibility, language: data.language,
-      avatarUrl: data.avatar_url, isPremium: data.is_premium, circleIds: []
+      id: data.id, 
+      name: `${data.first_name} ${data.last_name}`,
+      firstName: data.first_name, 
+      lastName: data.last_name, 
+      email: data.email,
+      dateOfBirth: data.date_of_birth || '1990-01-01', 
+      nationality: data.nationality || 'Global', 
+      gender: data.gender || 'N/A',
+      religion: data.religion as Religion, 
+      visibility: data.visibility as Visibility, 
+      language: data.language as Language,
+      avatarUrl: data.avatar_url, 
+      isPremium: data.is_premium || false, 
+      circleIds: []
     };
   }
 
   private mapDbPostToPost(p: any): Post {
     return {
-      id: p.id, userId: p.user_id, authorName: p.author_name,
-      authorReligion: p.author_religion, authorAvatarUrl: p.author_avatar_url,
-      content: p.content, language: p.language,
+      id: p.id, 
+      userId: p.user_id, 
+      authorName: p.author_name,
+      authorReligion: p.author_religion as Religion, 
+      authorAvatarUrl: p.author_avatar_url,
+      content: p.content, 
+      language: p.language as Language,
       timestamp: new Date(p.created_at).getTime(),
-      likes: p.likes || 0, prayers: p.prayers || 0,
-      isMiracle: p.is_miracle, isAnswered: p.is_answered,
-      promotionTier: p.promotion_tier, gifts: [],
+      likes: p.likes || 0, 
+      prayers: p.prayers || 0,
+      isMiracle: p.is_miracle, 
+      isAnswered: p.is_answered,
+      promotionTier: p.promotion_tier as PromotionTier, 
+      gifts: [],
       comments: p.comments?.map((c: any) => ({
-        id: c.id, userId: c.user_id, authorName: c.author_name,
-        authorAvatarUrl: c.author_avatar_url, content: c.content,
+        id: c.id, 
+        userId: c.user_id, 
+        authorName: c.author_name,
+        authorAvatarUrl: c.author_avatar_url, 
+        content: c.content,
         timestamp: new Date(c.created_at).getTime()
       })) || []
     };
   }
 
-  logout() { this.currentUser = null; }
+  async logout() { 
+    if (USE_REAL_DB && supabase) await supabase.auth.signOut();
+    this.currentUser = null; 
+  }
 }
 
 export const mockBackend = new BackendService();
