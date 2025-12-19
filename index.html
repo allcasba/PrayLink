@@ -35,7 +35,6 @@
     </style>
     <script>
       // Polyfill para process.env en el navegador para evitar errores de referencia
-      // Importante: No pongas claves reales aquí, se inyectan por el entorno de construcción
       if (typeof window !== 'undefined') {
         window.process = {
           env: {
@@ -51,8 +50,10 @@
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
+    "react/jsx-runtime": "https://esm.sh/react@^19.2.3/jsx-runtime",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "vite": "https://esm.sh/vite@^7.3.0",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
