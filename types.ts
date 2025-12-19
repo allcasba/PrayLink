@@ -1,3 +1,4 @@
+
 export enum Religion {
   CHRISTIANITY = 'Christianity',
   ISLAM = 'Islam',
@@ -11,61 +12,69 @@ export enum Religion {
 }
 
 export enum Visibility {
-  PUBLIC = 'Public', // Visible to everyone
-  SAME_RELIGION = 'Same Religion Only' // Visible only to users of the same religion
+  PUBLIC = 'Public',
+  SAME_RELIGION = 'Same Religion Only'
 }
 
 export type Language = 'English' | 'Spanish' | 'French' | 'German' | 'Arabic' | 'Hebrew' | 'Hindi' | 'Portuguese';
 
 export const SUPPORTED_LANGUAGES: Language[] = [
-  'English', 
-  'Spanish', 
-  'French', 
-  'German', 
-  'Arabic', 
-  'Hebrew', 
-  'Hindi', 
-  'Portuguese'
+  'English', 'Spanish', 'French', 'German', 'Arabic', 'Hebrew', 'Hindi', 'Portuguese'
 ];
 
-export enum GiftType {
-  CANDLE = 'Candle',
-  FLOWER = 'Flower',
-  DOVE = 'Dove'
-}
-
-export interface Gift {
-  type: GiftType;
-  senderName: string;
-  timestamp: number;
-}
-
-export enum PromotionTier {
-  NONE = 'None',
-  SILVER = 'Silver',     // Low cost, local visibility
-  GOLD = 'Gold',         // Medium cost, regional visibility
-  PLATINUM = 'Platinum'  // High cost, global visibility
-}
-
-export enum PaymentMethod {
-  CREDIT_CARD = 'Credit Card',
-  PAYPAL = 'PayPal',
-  CRYPTO = 'Cryptocurrency',
-  APPLE_PAY = 'Apple Pay'
-}
-
-export interface Tithe {
-  id: string;
-  userId: string;
-  amount: number;
-  currency: string;
-  method: PaymentMethod;
-  timestamp: number;
-}
+export const UI_TRANSLATIONS: Record<Language, Record<string, string>> = {
+  'Spanish': {
+    'welcome': 'Bienvenido a PrayLink',
+    'slogan': 'Multiplica el poder de tu fe',
+    'my_circle': 'Mi Círculo',
+    'global_altar': 'Altar Global',
+    'post_placeholder': '¿Qué milagro declaramos hoy?',
+    'publish': 'Publicar',
+    'miracle_call': 'Llamado a Milagro',
+    'prayers': 'Oraciones',
+    'praying': 'Orando',
+    'add_circle': 'Agregar al Círculo',
+    'in_circle': 'En tu Círculo',
+    'daily_inspiration': 'Palabra Diaria',
+    'give_offering': 'Dar Ofrenda',
+    'spiritual_guide': 'Guía Espiritual',
+    'logout': 'Cerrar Sesión',
+    'loading_souls': 'Sintonizando almas...',
+    'testimony': 'Testimonio',
+    'miracle_seen': 'Milagros Vistos'
+  },
+  'English': {
+    'welcome': 'Welcome to PrayLink',
+    'slogan': 'Multiply the power of your faith',
+    'my_circle': 'My Circle',
+    'global_altar': 'Global Altar',
+    'post_placeholder': 'What miracle are we declaring today?',
+    'publish': 'Publish',
+    'miracle_call': 'Call for Miracle',
+    'prayers': 'Prayers',
+    'praying': 'Praying',
+    'add_circle': 'Add to Circle',
+    'in_circle': 'In your Circle',
+    'daily_inspiration': 'Daily Inspiration',
+    'give_offering': 'Give Offering',
+    'spiritual_guide': 'Spiritual Guide',
+    'logout': 'Logout',
+    'loading_souls': 'Tuning into souls...',
+    'testimony': 'Testimony',
+    'miracle_seen': 'Miracles Seen'
+  },
+  // Se pueden expandir los demás idiomas aquí...
+  'French': { 'welcome': 'Bienvenue sur PrayLink' },
+  'German': { 'welcome': 'Willkommen bei PrayLink' },
+  'Arabic': { 'welcome': 'مرحبًا بك في PrayLink' },
+  'Hebrew': { 'welcome': 'ברוך הבא ל-PrayLink' },
+  'Hindi': { 'welcome': 'PrayLink में आपका स्वागत है' },
+  'Portuguese': { 'welcome': 'Bem-vindo ao PrayLink' }
+};
 
 export interface User {
   id: string;
-  name: string; // Display Name (First + Last)
+  name: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -77,15 +86,7 @@ export interface User {
   language: Language;
   avatarUrl: string;
   isPremium: boolean;
-}
-
-export interface Comment {
-  id: string;
-  userId: string;
-  authorName: string;
-  authorAvatarUrl: string;
-  content: string;
-  timestamp: number;
+  circleIds?: string[]; // IDs de personas en su círculo
 }
 
 export interface Post {
@@ -97,12 +98,32 @@ export interface Post {
   content: string;
   language: Language;
   timestamp: number;
-  likes: number; // Used for general posts
-  prayers: number; // Used for miracle requests
+  likes: number;
+  prayers: number;
   isMiracle: boolean;
-  isAnswered?: boolean; // True if the miracle/prayer was answered (Testimony)
-  promotionTier: PromotionTier; // Replaces isPromoted boolean
-  promotionExpiresAt?: number; // Timestamp when promotion ends
-  gifts: Gift[];
-  comments: Comment[];
+  isAnswered?: boolean;
+  promotionTier: PromotionTier;
+  gifts: any[];
+  comments: any[];
+}
+
+export enum PromotionTier {
+  NONE = 'None',
+  SILVER = 'Silver',
+  GOLD = 'Gold',
+  PLATINUM = 'Platinum'
+}
+
+export enum PaymentMethod {
+  CREDIT_CARD = 'Credit Card',
+  PAYPAL = 'PayPal'
+}
+
+export interface Tithe {
+  id: string;
+  userId: string;
+  amount: number;
+  currency: string;
+  method: PaymentMethod;
+  timestamp: number;
 }
