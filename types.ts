@@ -51,7 +51,8 @@ export const UI_TRANSLATIONS: Record<Language, Record<string, string>> = {
     'explore_global': 'Explora el Altar Global para ver más publicaciones fuera de tu fe.',
     'auth_login_title': 'Entrar al Altar',
     'auth_register_title': 'Crear Cuenta Espiritual',
-    'auth_email': 'Email',
+    'auth_email': 'Correo Electrónico',
+    'auth_password': 'Contraseña',
     'auth_first_name': 'Nombre',
     'auth_last_name': 'Apellido',
     'auth_switch_to_register': '¿Nuevo en PrayLink? Regístrate aquí',
@@ -95,7 +96,8 @@ export const UI_TRANSLATIONS: Record<Language, Record<string, string>> = {
     'explore_global': 'Explore the Global Altar to see posts outside your faith.',
     'auth_login_title': 'Enter the Altar',
     'auth_register_title': 'Create Spiritual Account',
-    'auth_email': 'Email',
+    'auth_email': 'Email Address',
+    'auth_password': 'Password',
     'auth_first_name': 'First Name',
     'auth_last_name': 'Last Name',
     'auth_switch_to_register': 'New to PrayLink? Register here',
@@ -111,12 +113,12 @@ export const UI_TRANSLATIONS: Record<Language, Record<string, string>> = {
     'landing_cta_primary': 'REQUEST A MIRACLE',
     'landing_cta_secondary': 'Be a speaker'
   },
-  'French': { 'welcome': 'Bienvenue sur PrayLink' },
-  'German': { 'welcome': 'Willkommen bei PrayLink' },
-  'Arabic': { 'welcome': 'مرحبًا بك في PrayLink' },
-  'Hebrew': { 'welcome': 'ברוך הבא ל-PrayLink' },
-  'Hindi': { 'welcome': 'PrayLink में आपका स्वागत es' },
-  'Portuguese': { 'welcome': 'Bem-vindo ao PrayLink' }
+  'French': { 'welcome': 'Bienvenue sur PrayLink', 'slogan': 'Multipliez le pouvoir de votre foi' },
+  'German': { 'welcome': 'Willkommen bei PrayLink', 'slogan': 'Vervielfachen Sie die Kraft Ihres Glaubens' },
+  'Arabic': { 'welcome': 'مرحبًا بك في PrayLink', 'slogan': 'ضاعف قوة إيمانك' },
+  'Hebrew': { 'welcome': 'ברוך הבא ל-PrayLink', 'slogan': 'הכפל את כוח האמונה שלך' },
+  'Hindi': { 'welcome': 'PrayLink में आपका स्वागत है', 'slogan': 'अपने विश्वास की शक्ति बढ़ाएँ' },
+  'Portuguese': { 'welcome': 'Bem-vindo ao PrayLink', 'slogan': 'Multiplique o poder da sua fé' }
 };
 
 export interface User {
