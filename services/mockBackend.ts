@@ -16,9 +16,44 @@ if (USE_REAL_DB) {
   }
 }
 
+const INITIAL_POSTS: Post[] = [
+  {
+    id: 'seed-1',
+    userId: 'u-system',
+    authorName: 'Guía Espiritual',
+    authorReligion: Religion.OTHER,
+    authorAvatarUrl: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=100&h=100&fit=crop',
+    content: 'Bienvenido al Altar Global. Que este espacio sea de bendición para tu vida y la de tus seres queridos.',
+    language: 'Spanish',
+    timestamp: Date.now() - 3600000,
+    likes: 124,
+    prayers: 89,
+    isMiracle: false,
+    promotionTier: PromotionTier.GOLD,
+    gifts: [],
+    comments: []
+  },
+  {
+    id: 'seed-2',
+    userId: 'u-system-2',
+    authorName: 'Maria Gracia',
+    authorReligion: Religion.CHRISTIANITY,
+    authorAvatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop',
+    content: 'Pido oración por la salud de mi abuela que se encuentra en recuperación quirúrgica. Gracias hermanos.',
+    language: 'Spanish',
+    timestamp: Date.now() - 1800000,
+    likes: 45,
+    prayers: 230,
+    isMiracle: true,
+    promotionTier: PromotionTier.PLATINUM,
+    gifts: [],
+    comments: []
+  }
+];
+
 class BackendService {
   private currentUser: User | null = null;
-  private mockPosts: Post[] = [];
+  private mockPosts: Post[] = [...INITIAL_POSTS];
 
   async login(email: string): Promise<User> {
     if (USE_REAL_DB && supabase) {
@@ -29,7 +64,7 @@ class BackendService {
       this.currentUser = user;
       return user;
     }
-    throw new Error("Base de datos no configurada.");
+    return this.register("Usuario", "Demo", email, Religion.OTHER, Visibility.PUBLIC, "Spanish");
   }
 
   async register(
@@ -81,8 +116,17 @@ class BackendService {
 
   async getFeed(viewer: User): Promise<Post[]> {
     if (USE_REAL_DB && supabase) {
-      const { data } = await supabase.from('posts').select('*, comments(*)').order('promotion_tier', { ascending: false }).order('created_at', { ascending: false });
-      return data?.map((p: any) => this.mapDbPostToPost(p)) || [];
+      try {
+        const { data } = await supabase.from('posts').select('*, comments(*)').order('promotion_tier', { ascending: false }).order('created_at', { ascending: false });
+        if (data && data.length > 0) {
+          const dbPosts = data.map((p: any) => this.mapDbPostToPost(p));
+          // Mezclamos con los posts locales nuevos que aún no estén en el fetch
+          const localOnly = this.mockPosts.filter(mp => !dbPosts.some(dp => dp.id === mp.id));
+          return [...localOnly, ...dbPosts];
+        }
+      } catch (e) {
+        console.error("DB Feed Error", e);
+      }
     }
     return this.mockPosts;
   }
@@ -96,11 +140,13 @@ class BackendService {
       promotionTier, gifts: [], comments: []
     };
 
+    // Añadir a la lista local inmediatamente
+    this.mockPosts = [newPost, ...this.mockPosts];
+
     if (USE_REAL_DB && supabase) {
       await supabase.from('posts').insert([{
         id: newPost.id, user_id: user.id, author_name: user.name,
-        author_religion: user.religion,
-        author_avatar_url: user.avatarUrl,
+        author_religion: user.religion, author_avatar_url: user.avatarUrl,
         content: newPost.content, language: newPost.language,
         is_miracle: newPost.isMiracle, promotion_tier: newPost.promotionTier
       }]);
@@ -112,8 +158,9 @@ class BackendService {
     const tithe: Tithe = { id: `t${Date.now()}`, userId, amount, currency: 'USD', method, timestamp: Date.now() };
     if (USE_REAL_DB && supabase) {
       await supabase.from('tithes').insert([{ id: tithe.id, user_id: userId, amount, method }]);
-      if (amount >= 4.99) await supabase.from('profiles').update({ is_premium: true }).eq('id', userId);
+      if (amount >= 9.99) await supabase.from('profiles').update({ is_premium: true }).eq('id', userId);
     }
+    if (this.currentUser && amount >= 9.99) this.currentUser.isPremium = true;
     return tithe;
   }
 
@@ -121,17 +168,21 @@ class BackendService {
     if (USE_REAL_DB && supabase) {
       await supabase.rpc('increment_counter', { row_id: postId, column_name: type === 'like' ? 'likes' : 'prayers' });
     }
+    const post = this.mockPosts.find(p => p.id === postId);
+    if (post) {
+      if (type === 'like') post.likes++;
+      else post.prayers++;
+    }
   }
 
   async addComment(postId: string, content: string, user: User) {
+    const comment = { id: String(Date.now()), userId: user.id, authorName: user.name, authorAvatarUrl: user.avatarUrl, content, timestamp: Date.now() };
     if (USE_REAL_DB && supabase) {
       await supabase.from('comments').insert([{ post_id: postId, user_id: user.id, author_name: user.name, author_avatar_url: user.avatarUrl, content }]);
     }
-    return { id: String(Date.now()), userId: user.id, authorName: user.name, authorAvatarUrl: user.avatarUrl, content, timestamp: Date.now() };
-  }
-
-  async markAsAnswered(postId: string) {
-    if (USE_REAL_DB && supabase) await supabase.from('posts').update({ is_answered: true }).eq('id', postId);
+    const post = this.mockPosts.find(p => p.id === postId);
+    if (post) post.comments = [...(post.comments || []), comment];
+    return comment;
   }
 
   private mapDbUserToUser(data: any): User {
