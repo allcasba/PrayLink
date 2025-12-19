@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Religion, Visibility, User, Language, SUPPORTED_LANGUAGES, UI_TRANSLATIONS } from '../types';
 import { mockBackend } from '../services/mockBackend';
 import { Button } from './Button';
-import { Shield, Languages, Lock, UserPlus, Globe } from 'lucide-react';
+import { Shield, Languages, Lock, UserPlus, Globe, Key } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -17,6 +17,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [religion, setReligion] = useState<Religion>(Religion.CHRISTIANITY);
   const [visibility, setVisibility] = useState<Visibility>(Visibility.PUBLIC);
   const [language, setLanguage] = useState<Language>('Spanish');
@@ -30,13 +31,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     try {
       let user: User;
       if (isRegistering) {
-        user = await mockBackend.register(firstName, lastName, email, religion, visibility, language);
+        user = await mockBackend.register(firstName, lastName, email, religion, visibility, language, password);
       } else {
-        user = await mockBackend.login(email);
+        user = await mockBackend.login(email, password);
       }
       onLogin(user);
     } catch (err: any) {
-      setError(err.message || 'Connection Error');
+      setError(err.message || 'Error de conexión');
     } finally {
       setLoading(false);
     }
@@ -54,7 +55,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         </div>
 
         <form className="mt-10 space-y-6" onSubmit={handleSubmit}>
-          {error && <div className="p-4 bg-red-50 text-red-600 text-xs rounded-2xl font-black uppercase text-center">{error}</div>}
+          {error && <div className="p-4 bg-red-50 text-red-600 text-[10px] font-black uppercase rounded-2xl text-center">{error}</div>}
           
           <div className="space-y-4">
             {isRegistering && (
@@ -80,7 +81,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </>
             )}
 
-            <input type="email" required placeholder={t['auth_email']} value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
+            <div className="space-y-4">
+              <input type="email" required placeholder={t['auth_email']} value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
+              <div className="relative">
+                <Key className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
+                <input type="password" required placeholder={t['auth_password']} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-12 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
+              </div>
+            </div>
           </div>
 
           <Button type="submit" isLoading={loading} className="w-full py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-indigo-100 bg-indigo-600">
