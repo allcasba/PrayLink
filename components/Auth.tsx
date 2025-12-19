@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Religion, Visibility, User, Language, SUPPORTED_LANGUAGES } from '../types';
+import { Religion, Visibility, User, Language, SUPPORTED_LANGUAGES, UI_TRANSLATIONS } from '../types';
 import { mockBackend } from '../services/mockBackend';
 import { Button } from './Button';
 import { Shield, Languages, Lock, UserPlus, Globe } from 'lucide-react';
@@ -21,6 +21,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [visibility, setVisibility] = useState<Visibility>(Visibility.PUBLIC);
   const [language, setLanguage] = useState<Language>('Spanish');
 
+  const t = UI_TRANSLATIONS[language] || UI_TRANSLATIONS['Spanish'];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -34,7 +36,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       }
       onLogin(user);
     } catch (err: any) {
-      setError(err.message || 'Error de conexión');
+      setError(err.message || 'Connection Error');
     } finally {
       setLoading(false);
     }
@@ -48,7 +50,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <Shield className="h-10 w-10 text-white" />
           </div>
           <h2 className="mt-8 text-4xl font-black text-slate-900 tracking-tighter">PrayLink</h2>
-          <p className="text-slate-400 font-medium mt-2">La red global de fe y milagros</p>
+          <p className="text-slate-400 font-medium mt-2">{t['slogan']}</p>
         </div>
 
         <form className="mt-10 space-y-6" onSubmit={handleSubmit}>
@@ -58,8 +60,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             {isRegistering && (
               <>
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="text" required placeholder="Nombre" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
-                  <input type="text" required placeholder="Apellido" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
+                  <input type="text" required placeholder={t['auth_first_name']} value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
+                  <input type="text" required placeholder={t['auth_last_name']} value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
                 </div>
                 
                 <div className="relative">
@@ -78,17 +80,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </>
             )}
 
-            <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
+            <input type="email" required placeholder={t['auth_email']} value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
           </div>
 
           <Button type="submit" isLoading={loading} className="w-full py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-indigo-100 bg-indigo-600">
-            {isRegistering ? 'Crear Cuenta Espiritual' : 'Entrar al Altar'}
+            {isRegistering ? t['auth_register_title'] : t['auth_login_title']}
           </Button>
         </form>
 
         <div className="text-center pt-4">
           <button type="button" onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:text-indigo-600 transition-colors">
-            {isRegistering ? '¿Ya eres parte? Inicia sesión' : '¿Nuevo en PrayLink? Regístrate aquí'}
+            {isRegistering ? t['auth_switch_to_login'] : t['auth_switch_to_register']}
           </button>
         </div>
       </div>

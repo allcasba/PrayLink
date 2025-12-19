@@ -1,19 +1,33 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { User, UI_TRANSLATIONS } from '../types';
 import { Button } from './Button';
-import { LogOut, Sun, Crown, Sparkles, Heart, Hand } from 'lucide-react';
+import { LogOut, Sun, Crown, Sparkles, Heart, Hand, Camera, X } from 'lucide-react';
+import { mockBackend } from '../services/mockBackend';
 
 interface LayoutProps {
   user: User;
   onLogout: () => void;
   onOpenGuide: () => void;
   onOpenTithe: () => void;
+  onUpdateUser: (user: User) => void;
   children: React.ReactNode;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ user, onLogout, onOpenGuide, onOpenTithe, children }) => {
+export const Layout: React.FC<LayoutProps> = ({ user, onLogout, onOpenGuide, onOpenTithe, onUpdateUser, children }) => {
   const t = UI_TRANSLATIONS[user.language] || UI_TRANSLATIONS['Spanish'];
+  const [isChangingAvatar, setIsChangingAvatar] = useState(false);
+  const [newAvatarUrl, setNewAvatarUrl] = useState(user.avatarUrl);
+
+  const handleSaveAvatar = async () => {
+    try {
+      const updatedUser = await mockBackend.updateProfile(user.id, { avatarUrl: newAvatarUrl });
+      onUpdateUser(updatedUser);
+      setIsChangingAvatar(false);
+    } catch (err) {
+      console.error("Failed to update avatar", err);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -32,7 +46,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, onOpenGuide, onO
           </div>
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-3 px-4 py-2 bg-slate-50 rounded-2xl">
-              <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-xl" />
+              <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-xl object-cover" />
               <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{user.firstName}</p>
             </div>
             <button onClick={onLogout} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
@@ -46,7 +60,37 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, onOpenGuide, onO
         <div className="grid grid-cols-12 gap-10">
           <aside className="col-span-3">
              <div className="bg-white rounded-[3rem] shadow-xl p-10 text-center border border-slate-100 sticky top-32">
-                <img src={user.avatarUrl} alt="" className="h-24 w-24 rounded-[2rem] mx-auto mb-6 shadow-2xl" />
+                <div className="relative group mx-auto mb-6 h-24 w-24">
+                  <img src={user.avatarUrl} alt="" className="h-full w-full rounded-[2rem] object-cover shadow-2xl" />
+                  <button 
+                    onClick={() => setIsChangingAvatar(true)}
+                    className="absolute inset-0 bg-black/40 rounded-[2rem] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Camera className="h-6 w-6 text-white" />
+                  </button>
+                </div>
+                
+                {isChangingAvatar && (
+                  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white p-8 rounded-3xl w-full max-w-sm">
+                      <div className="flex justify-between mb-4">
+                        <h4 className="font-black uppercase text-xs tracking-widest">{t['change_avatar']}</h4>
+                        <button onClick={() => setIsChangingAvatar(false)}><X className="h-4 w-4"/></button>
+                      </div>
+                      <input 
+                        type="text" 
+                        value={newAvatarUrl} 
+                        onChange={e => setNewAvatarUrl(e.target.value)} 
+                        placeholder={t['avatar_url_label']}
+                        className="w-full p-4 bg-slate-100 rounded-xl mb-4 text-xs font-bold"
+                      />
+                      <Button onClick={handleSaveAvatar} className="w-full rounded-xl py-4 uppercase text-[10px] font-black tracking-widest">
+                        {t['save']}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 <h3 className="font-black text-xl text-slate-900 mb-1">{user.name}</h3>
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-500 mb-8">{user.religion}</p>
                 

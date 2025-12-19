@@ -92,6 +92,22 @@ class BackendService {
     return newUser;
   }
 
+  async updateProfile(userId: string, data: Partial<User>): Promise<User> {
+    if (this.currentUser && this.currentUser.id === userId) {
+      this.currentUser = { ...this.currentUser, ...data };
+      if (USE_REAL_DB && supabase) {
+        await supabase.from('profiles').update({
+          avatar_url: data.avatarUrl,
+          first_name: data.firstName,
+          last_name: data.lastName,
+          language: data.language
+        }).eq('id', userId);
+      }
+      return this.currentUser;
+    }
+    throw new Error("Unauthorized");
+  }
+
   async toggleCircle(targetId: string): Promise<string[]> {
     if (!this.currentUser) return [];
     const isAdding = !this.currentUser.circleIds?.includes(targetId);
@@ -120,7 +136,6 @@ class BackendService {
         const { data } = await supabase.from('posts').select('*, comments(*)').order('promotion_tier', { ascending: false }).order('created_at', { ascending: false });
         if (data && data.length > 0) {
           const dbPosts = data.map((p: any) => this.mapDbPostToPost(p));
-          // Mezclamos con los posts locales nuevos que aún no estén en el fetch
           const localOnly = this.mockPosts.filter(mp => !dbPosts.some(dp => dp.id === mp.id));
           return [...localOnly, ...dbPosts];
         }
@@ -140,7 +155,6 @@ class BackendService {
       promotionTier, gifts: [], comments: []
     };
 
-    // Añadir a la lista local inmediatamente
     this.mockPosts = [newPost, ...this.mockPosts];
 
     if (USE_REAL_DB && supabase) {

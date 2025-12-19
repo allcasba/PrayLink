@@ -45,7 +45,6 @@ export default function App() {
     
     try {
       const createdPost = await mockBackend.createPost(newPostContent, currentUser, isMiracleRequest, PromotionTier.NONE);
-      // Insertamos al principio del feed local
       setPosts(prev => [createdPost, ...prev]);
       setNewPostContent('');
       setIsMiracleRequest(false);
@@ -54,7 +53,6 @@ export default function App() {
     }
   };
 
-  // Lógica de filtrado inteligente: Si no hay nada en comunidad, avisamos o mostramos global
   const filteredPosts = posts.filter(post => {
     if (feedFilter === 'community' && currentUser) {
       const isFromCircle = currentUser.circleIds?.includes(post.userId);
@@ -74,6 +72,7 @@ export default function App() {
       onLogout={() => { mockBackend.logout(); setCurrentUser(null); }}
       onOpenGuide={() => setShowSpiritualGuide(true)}
       onOpenTithe={() => setShowTithingModal(true)}
+      onUpdateUser={setCurrentUser}
     >
       <div className="bg-slate-900 text-white p-8 rounded-[3rem] mb-12 flex items-center justify-between shadow-2xl relative overflow-hidden">
         <div className="flex items-center space-x-6 relative z-10">
@@ -81,8 +80,8 @@ export default function App() {
             <Flame className="h-6 w-6 text-orange-400" />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-1">Manto de Oración Global</p>
-            <p className="text-3xl font-black tracking-tighter">142,501 <span className="text-xs text-slate-400 ml-2">Voces Unidas</span></p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-1">{t['global_mantle']}</p>
+            <p className="text-3xl font-black tracking-tighter">142,501 <span className="text-xs text-slate-400 ml-2">{t['voices_united']}</span></p>
           </div>
         </div>
         <Button onClick={() => setFeedFilter('all')} variant="ghost" className="text-white text-[10px] font-black uppercase border border-white/10 rounded-2xl px-6">
@@ -124,7 +123,7 @@ export default function App() {
       {feedFilter === 'community' && filteredPosts.length < 5 && posts.length > 5 && (
         <div className="mb-10 p-6 bg-indigo-50 rounded-[2.5rem] border border-indigo-100 flex items-center space-x-4">
           <Info className="h-6 w-6 text-indigo-500" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Explora el Altar Global para ver más publicaciones fuera de tu fe.</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">{t['explore_global']}</p>
         </div>
       )}
 
@@ -137,8 +136,8 @@ export default function App() {
           ))
         ) : (
           <div className="text-center py-20">
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No hay publicaciones disponibles en este momento.</p>
-            <Button onClick={loadFeed} variant="ghost" className="mt-4 text-indigo-600 font-black">Reintentar Conexión</Button>
+            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t['no_posts']}</p>
+            <Button onClick={loadFeed} variant="ghost" className="mt-4 text-indigo-600 font-black">{t['retry']}</Button>
           </div>
         )}
       </div>

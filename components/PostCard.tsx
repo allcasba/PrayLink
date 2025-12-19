@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Post, Religion, Language, User, PromotionTier, UI_TRANSLATIONS } from '../types';
 import { translateText } from '../services/geminiService';
-import { Heart, MessageCircle, Hand, Flame, Globe, Sun, Send, Zap, Crown, Sparkles, UserPlus, CheckCircle2 } from 'lucide-react';
+import { Heart, MessageCircle, Hand, Flame, Globe, Sun, Send, Zap, Crown, Sparkles, UserPlus, CheckCircle2, Languages } from 'lucide-react';
 import { mockBackend } from '../services/mockBackend';
 
 interface PostCardProps {
@@ -26,14 +26,12 @@ export const PostCard: React.FC<PostCardProps> = ({ post, userLanguage, currentU
   const t = UI_TRANSLATIONS[userLanguage] || UI_TRANSLATIONS['Spanish'];
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
   const [interactionCount, setInteractionCount] = useState(post.isMiracle ? post.prayers : post.likes);
   const [hasInteracted, setHasInteracted] = useState(false);
-  const [isAnswered, setIsAnswered] = useState(post.isAnswered || false);
   const [isInCircle, setIsInCircle] = useState(currentUser.circleIds?.includes(post.userId) || false);
   const [togglingCircle, setTogglingCircle] = useState(false);
-  const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState(post.comments || []);
-  const [newComment, setNewComment] = useState('');
+  const [comments] = useState(post.comments || []);
 
   const isPromoted = post.promotionTier !== PromotionTier.NONE;
 
@@ -70,6 +68,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, userLanguage, currentU
     await mockBackend.interactPost(post.id, post.isMiracle ? 'pray' : 'like');
   };
 
+  const displayContent = showOriginal ? post.content : (translatedContent || post.content);
+
   return (
     <div className={`relative rounded-[2.5rem] border p-10 mb-10 transition-all duration-500 ${isPromoted ? 'bg-gradient-to-br from-white to-amber-50/20 border-amber-200 shadow-2xl shadow-amber-100/50 scale-[1.01]' : 'bg-white shadow-sm border-slate-100'}`}>
       <div className="flex justify-between items-start mb-8">
@@ -104,10 +104,20 @@ export const PostCard: React.FC<PostCardProps> = ({ post, userLanguage, currentU
       </div>
 
       <div className="mb-8">
+        <div className="flex justify-between items-center mb-4">
+          {translatedContent && (
+            <button 
+              onClick={() => setShowOriginal(!showOriginal)}
+              className="flex items-center space-x-2 text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors"
+            >
+              <Languages className="h-3.5 w-3.5" />
+              <span>{showOriginal ? t['see_translation'] : t['see_original']}</span>
+            </button>
+          )}
+        </div>
         <p className={`text-slate-800 font-medium leading-tight whitespace-pre-wrap ${isPromoted ? 'text-3xl' : 'text-2xl'}`}>
-          {isTranslating ? <span className="animate-pulse text-slate-200 italic">Traduciendo milagro...</span> : (translatedContent || post.content)}
+          {isTranslating ? <span className="animate-pulse text-slate-200 italic">{userLanguage === 'English' ? 'Tuning miracle...' : 'Traduciendo milagro...'}</span> : displayContent}
         </p>
-        {translatedContent && <p className="text-[10px] text-indigo-400 mt-4 font-black uppercase tracking-widest">Traducción IA al {userLanguage}</p>}
       </div>
 
       <div className="flex items-center justify-between pt-8 border-t border-slate-50">
@@ -117,14 +127,14 @@ export const PostCard: React.FC<PostCardProps> = ({ post, userLanguage, currentU
           className={`flex items-center space-x-4 px-8 py-4 rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest transition-all ${hasInteracted ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-600 text-white shadow-xl shadow-indigo-100'}`}
         >
           {post.isMiracle ? <Hand className="h-5 w-5" /> : <Heart className="h-5 w-5" />}
-          <span>{hasInteracted ? t['praying'] : t['publish']}</span>
+          <span>{hasInteracted ? t['praying'] : (post.isMiracle ? t['prayers'] : t['publish'])}</span>
           <span className="bg-white/20 px-2 py-0.5 rounded-lg ml-2">{interactionCount}</span>
         </button>
 
-        <button onClick={() => setShowComments(!showComments)} className="flex items-center space-x-3 text-slate-300 hover:text-indigo-600 font-black text-[10px] uppercase tracking-widest transition-colors">
+        <div className="flex items-center space-x-3 text-slate-300 font-black text-[10px] uppercase tracking-widest">
           <MessageCircle className="h-5 w-5" />
           <span>{comments.length}</span>
-        </button>
+        </div>
       </div>
     </div>
   );

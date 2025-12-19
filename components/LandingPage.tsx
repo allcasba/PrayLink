@@ -2,12 +2,17 @@
 import React from 'react';
 import { Button } from './Button';
 import { BookHeart, Users, Zap, Globe, Flame, Sparkles, Hand, ArrowRight } from 'lucide-react';
+import { UI_TRANSLATIONS } from '../types';
 
 interface LandingPageProps {
   onGetStarted: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
+  // Landing is mostly static, but we'll use Spanish as base for the complex copy, 
+  // and the translation keys for the primary CTAs.
+  const t = UI_TRANSLATIONS['Spanish']; // Default to Spanish landing for now as it has specific copy
+
   return (
     <div className="min-h-screen bg-white selection:bg-indigo-100 selection:text-indigo-900">
       {/* Navigation */}
@@ -38,25 +43,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
               <span className="text-[10px] font-black text-indigo-700 uppercase tracking-[0.2em]">Más de 140,000 almas orando ahora</span>
             </div>
             <h1 className="text-6xl sm:text-8xl font-black text-slate-900 tracking-tighter mb-10 leading-[0.85]">
-              Donde tu oración <br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 animate-gradient">encuentra eco.</span>
+              {t['landing_hero_title_1']} <br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 animate-gradient">{t['landing_hero_title_2']}</span>
             </h1>
             <p className="text-xl sm:text-2xl text-slate-500 mb-14 leading-relaxed max-w-3xl mx-auto font-medium">
-              PrayLink conecta intenciones con miles de oradores. <br className="hidden sm:block" />
+              {t['landing_hero_subtitle']} <br className="hidden sm:block" />
               Porque cuando dos o más se reúnen, <span className="text-slate-900 font-bold underline decoration-indigo-300 underline-offset-4">el milagro comienza.</span>
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
               <Button onClick={onGetStarted} className="w-full sm:w-auto px-16 py-6 text-xl font-black shadow-2xl shadow-indigo-200 rounded-[2rem] transform hover:scale-105 active:scale-95 transition-all bg-indigo-600">
-                PEDIR UN MILAGRO
+                {t['landing_cta_primary']}
               </Button>
               <button onClick={onGetStarted} className="w-full sm:w-auto text-lg font-bold text-slate-400 hover:text-indigo-600 transition-colors flex items-center justify-center">
-                Ser un orador <ArrowRight className="ml-2 h-5 w-5" />
+                {t['landing_cta_secondary']} <ArrowRight className="ml-2 h-5 w-5" />
               </button>
             </div>
           </div>
         </div>
         
-        {/* Background elements */}
         <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[1200px] h-[1200px] bg-indigo-50/50 rounded-full blur-[140px] -z-10"></div>
         <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-purple-50/50 rounded-full blur-[100px] -z-10"></div>
       </div>
