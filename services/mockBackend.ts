@@ -1,4 +1,3 @@
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { User, Post, Religion, Visibility, Language, PromotionTier, PaymentMethod, Tithe } from '../types';
 
@@ -22,7 +21,6 @@ class BackendService {
 
   async login(email: string, password?: string): Promise<User> {
     if (USE_REAL_DB && supabase) {
-      // Intento de login con Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password: password || 'default_pass' 
@@ -30,23 +28,21 @@ class BackendService {
 
       if (authError) throw new Error(authError.message);
 
-      // Cargar el perfil asociado
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*, circle:circles(target_id)')
+        .select('*, circles:circles(target_id)')
         .eq('id', authData.user.id)
         .single();
 
-      if (profileError) throw new Error("Profile not found");
+      if (profileError) throw new Error("Perfil no encontrado. Asegúrese de haber ejecutado el script SQL corregido en Supabase.");
 
       const user = this.mapDbUserToUser(profile);
-      user.circleIds = profile.circle?.map((c: any) => c.target_id) || [];
+      user.circleIds = profile.circles?.map((c: any) => c.target_id) || [];
       this.currentUser = user;
       return user;
     }
     
-    // Fallback demo
-    return this.register("User", "Demo", email, Religion.OTHER, Visibility.PUBLIC, "Spanish", "password");
+    return this.register("Demo", "User", email, Religion.OTHER, Visibility.PUBLIC, "Spanish", "password");
   }
 
   async register(
@@ -56,33 +52,34 @@ class BackendService {
   ): Promise<User> {
     
     if (USE_REAL_DB && supabase) {
-      // 1. Crear usuario en Supabase Auth
+      // 1. Registro en Auth enviando TODOS los datos en 'data'.
+      // El disparador de la DB (public.handle_new_user) procesará estos campos.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
-        password: password || 'default_pass'
+        password: password || 'default_pass',
+        options: {
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            religion: religion,
+            visibility: visibility,
+            language: language
+          }
+        }
       });
 
       if (authError) throw new Error(authError.message);
-      if (!authData.user) throw new Error("Register failed");
+      if (!authData.user) throw new Error("No se pudo crear el usuario.");
 
-      // 2. Crear perfil en tabla profiles
+      const userId = authData.user.id;
+      
+      // Ya no necesitamos llamar a upsert desde el cliente aquí, 
+      // porque el trigger de SQL lo hizo por nosotros con permisos de superusuario.
+      
       const avatarUrl = `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=random`;
-      const { error: profileError } = await supabase.from('profiles').insert([{
-        id: authData.user.id,
-        email: email,
-        first_name: firstName,
-        last_name: lastName,
-        religion: religion,
-        visibility: visibility,
-        language: language,
-        avatar_url: avatarUrl,
-        is_premium: false
-      }]);
-
-      if (profileError) throw new Error(profileError.message);
-
+      
       const newUser: User = {
-        id: authData.user.id,
+        id: userId,
         name: `${firstName} ${lastName}`,
         firstName, lastName, email, religion, visibility, language,
         dateOfBirth: '1990-01-01', nationality: 'Global', gender: 'N/A',
@@ -92,7 +89,6 @@ class BackendService {
       return newUser;
     }
 
-    // Mock local
     const mockUser: User = {
       id: `u${Date.now()}`,
       name: `${firstName} ${lastName}`,
@@ -107,39 +103,41 @@ class BackendService {
 
   async updateProfile(userId: string, data: Partial<User>): Promise<User> {
     if (this.currentUser && this.currentUser.id === userId) {
-      this.currentUser = { ...this.currentUser, ...data };
       if (USE_REAL_DB && supabase) {
-        const { error } = await supabase.from('profiles').update({
-          avatar_url: data.avatarUrl,
-          first_name: data.firstName,
-          last_name: data.lastName,
-          language: data.language
-        }).eq('id', userId);
-        if (error) console.error("Update DB error:", error);
+        const dbUpdate: any = {};
+        if (data.avatarUrl) dbUpdate.avatar_url = data.avatarUrl;
+        if (data.firstName) dbUpdate.first_name = data.firstName;
+        if (data.lastName) dbUpdate.last_name = data.lastName;
+        if (data.language) dbUpdate.language = data.language;
+        if (data.religion) dbUpdate.religion = data.religion;
+
+        const { error } = await supabase.from('profiles').update(dbUpdate).eq('id', userId);
+        if (error) throw new Error("Fallo al actualizar perfil.");
+      }
+      this.currentUser = { ...this.currentUser, ...data };
+      if (data.firstName || data.lastName) {
+        this.currentUser.name = `${this.currentUser.firstName} ${this.currentUser.lastName}`;
       }
       return this.currentUser;
     }
-    throw new Error("Unauthorized");
+    throw new Error("No autorizado.");
   }
 
   async toggleCircle(targetId: string): Promise<string[]> {
     if (!this.currentUser) return [];
-    const isAdding = !this.currentUser.circleIds?.includes(targetId);
+    const currentCircle = this.currentUser.circleIds || [];
+    const isAdding = !currentCircle.includes(targetId);
 
     if (USE_REAL_DB && supabase) {
       if (isAdding) {
         await supabase.from('circles').insert([{ user_id: this.currentUser.id, target_id: targetId }]);
-        this.currentUser.circleIds = [...(this.currentUser.circleIds || []), targetId];
+        this.currentUser.circleIds = [...currentCircle, targetId];
       } else {
         await supabase.from('circles').delete().eq('user_id', this.currentUser.id).eq('target_id', targetId);
-        this.currentUser.circleIds = (this.currentUser.circleIds || []).filter(id => id !== targetId);
+        this.currentUser.circleIds = currentCircle.filter(id => id !== targetId);
       }
     } else {
-      if (isAdding) {
-        this.currentUser.circleIds = [...(this.currentUser.circleIds || []), targetId];
-      } else {
-        this.currentUser.circleIds = (this.currentUser.circleIds || []).filter(id => id !== targetId);
-      }
+      this.currentUser.circleIds = isAdding ? [...currentCircle, targetId] : currentCircle.filter(id => id !== targetId);
     }
     return this.currentUser.circleIds || [];
   }
@@ -154,20 +152,18 @@ class BackendService {
           .order('created_at', { ascending: false });
         
         if (error) throw error;
-        
-        if (data) {
-          return data.map((p: any) => this.mapDbPostToPost(p));
-        }
+        if (data) return data.map((p: any) => this.mapDbPostToPost(p));
       } catch (e) {
-        console.error("DB Feed Error", e);
+        console.error("Error al cargar altar:", e);
       }
     }
     return this.mockPosts;
   }
 
   async createPost(content: string, user: User, isMiracle: boolean, promotionTier: PromotionTier): Promise<Post> {
+    const postId = `p${Date.now()}`;
     const newPost: Post = {
-      id: `p${Date.now()}`, 
+      id: postId,
       userId: user.id, 
       authorName: user.name,
       authorReligion: user.religion, 
@@ -196,7 +192,7 @@ class BackendService {
         is_miracle: newPost.isMiracle, 
         promotion_tier: newPost.promotionTier
       }]);
-      if (error) console.error("Create post error:", error);
+      if (error) console.error("Error al insertar post:", error);
     } else {
       this.mockPosts = [newPost, ...this.mockPosts];
     }
@@ -205,18 +201,32 @@ class BackendService {
   }
 
   async processTithe(userId: string, amount: number, method: PaymentMethod): Promise<Tithe> {
-    const tithe: Tithe = { id: `t${Date.now()}`, userId, amount, currency: 'USD', method, timestamp: Date.now() };
+    const titheId = `t${Date.now()}`;
+    const tithe: Tithe = { id: titheId, userId, amount, currency: 'USD', method, timestamp: Date.now() };
+    
     if (USE_REAL_DB && supabase) {
-      await supabase.from('tithes').insert([{ id: tithe.id, user_id: userId, amount, method }]);
-      if (amount >= 9.99) await supabase.from('profiles').update({ is_premium: true }).eq('id', userId);
+      await supabase.from('tithes').insert([{ 
+        id: tithe.id, 
+        user_id: userId, 
+        amount: amount, 
+        method: method 
+      }]);
+      if (amount >= 9.99) {
+        await supabase.from('profiles').update({ is_premium: true }).eq('id', userId);
+        if (this.currentUser) this.currentUser.isPremium = true;
+      }
+    } else {
+      if (this.currentUser && amount >= 9.99) this.currentUser.isPremium = true;
     }
-    if (this.currentUser && amount >= 9.99) this.currentUser.isPremium = true;
     return tithe;
   }
 
   async interactPost(postId: string, type: 'like' | 'pray') {
     if (USE_REAL_DB && supabase) {
-      await supabase.rpc('increment_counter', { row_id: postId, column_name: type === 'like' ? 'likes' : 'prayers' });
+      await supabase.rpc('increment_counter', { 
+        row_id: postId, 
+        column_name: type === 'like' ? 'likes' : 'prayers' 
+      });
     }
     const post = this.mockPosts.find(p => p.id === postId);
     if (post) {
@@ -228,17 +238,17 @@ class BackendService {
   private mapDbUserToUser(data: any): User {
     return {
       id: data.id, 
-      name: `${data.first_name} ${data.last_name}`,
-      firstName: data.first_name, 
-      lastName: data.last_name, 
+      name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Fiel Sin Nombre',
+      firstName: data.first_name || '', 
+      lastName: data.last_name || '', 
       email: data.email,
       dateOfBirth: data.date_of_birth || '1990-01-01', 
       nationality: data.nationality || 'Global', 
       gender: data.gender || 'N/A',
-      religion: data.religion as Religion, 
-      visibility: data.visibility as Visibility, 
-      language: data.language as Language,
-      avatarUrl: data.avatar_url, 
+      religion: (data.religion as Religion) || Religion.OTHER, 
+      visibility: (data.visibility as Visibility) || Visibility.PUBLIC, 
+      language: (data.language as Language) || 'Spanish',
+      avatarUrl: data.avatar_url || `https://ui-avatars.com/api/?name=${data.email}`, 
       isPremium: data.is_premium || false, 
       circleIds: []
     };
@@ -249,16 +259,16 @@ class BackendService {
       id: p.id, 
       userId: p.user_id, 
       authorName: p.author_name,
-      authorReligion: p.author_religion as Religion, 
+      authorReligion: (p.author_religion as Religion) || Religion.OTHER, 
       authorAvatarUrl: p.author_avatar_url,
       content: p.content, 
-      language: p.language as Language,
+      language: (p.language as Language) || 'Spanish',
       timestamp: new Date(p.created_at).getTime(),
       likes: p.likes || 0, 
       prayers: p.prayers || 0,
-      isMiracle: p.is_miracle, 
-      isAnswered: p.is_answered,
-      promotionTier: p.promotion_tier as PromotionTier, 
+      isMiracle: p.is_miracle || false, 
+      isAnswered: p.is_answered || false,
+      promotionTier: (p.promotion_tier as PromotionTier) || PromotionTier.NONE, 
       gifts: [],
       comments: p.comments?.map((c: any) => ({
         id: c.id, 
