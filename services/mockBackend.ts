@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { User, Post, Religion, Visibility, Language, GiftType, PromotionTier, PaymentMethod, Tithe, Comment } from '../types';
+import { User, Post, Religion, Visibility, Language, PromotionTier, PaymentMethod, Tithe } from '../types';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY || '';
@@ -16,257 +16,147 @@ if (USE_REAL_DB) {
   }
 }
 
-const MOCK_USERS: User[] = [
-  {
-    id: 'u1',
-    name: 'Sarah Jenkins',
-    firstName: 'Sarah',
-    lastName: 'Jenkins',
-    email: 'sarah@example.com',
-    dateOfBirth: '1985-04-12',
-    nationality: 'United States',
-    gender: 'Female',
-    religion: Religion.CHRISTIANITY,
-    visibility: Visibility.PUBLIC,
-    language: 'English',
-    avatarUrl: 'https://picsum.photos/150/150?random=1',
-    isPremium: true
-  },
-  {
-    id: 'u2',
-    name: 'Ahmed Hassan',
-    firstName: 'Ahmed',
-    lastName: 'Hassan',
-    email: 'ahmed@example.com',
-    dateOfBirth: '1990-08-23',
-    nationality: 'Egypt',
-    gender: 'Male',
-    religion: Religion.ISLAM,
-    visibility: Visibility.SAME_RELIGION,
-    language: 'Arabic',
-    avatarUrl: 'https://picsum.photos/150/150?random=2',
-    isPremium: false
-  },
-  {
-    id: 'u3',
-    name: 'David Cohen',
-    firstName: 'David',
-    lastName: 'Cohen',
-    email: 'david@example.com',
-    dateOfBirth: '1982-11-05',
-    nationality: 'Israel',
-    gender: 'Male',
-    religion: Religion.JUDAISM,
-    visibility: Visibility.PUBLIC,
-    language: 'Hebrew',
-    avatarUrl: 'https://picsum.photos/150/150?random=3',
-    isPremium: false
-  }
-];
-
-const MOCK_POSTS: Post[] = [
-  {
-    id: 'p0',
-    userId: 'u1',
-    authorName: 'Sarah Jenkins',
-    authorReligion: Religion.CHRISTIANITY,
-    authorAvatarUrl: 'https://picsum.photos/150/150?random=1',
-    content: 'Feeling blessed today! The community service went great.',
-    language: 'English',
-    timestamp: Date.now() - 3600000,
-    likes: 12,
-    prayers: 0,
-    isMiracle: false,
-    isAnswered: false,
-    promotionTier: PromotionTier.NONE,
-    gifts: [],
-    comments: []
-  },
-  {
-    id: 'p1',
-    userId: 'u2',
-    authorName: 'Ahmed Hassan',
-    authorReligion: Religion.ISLAM,
-    authorAvatarUrl: 'https://picsum.photos/150/150?random=2',
-    content: 'Wishing peace and prosperity to all during this holy time.',
-    language: 'Arabic',
-    timestamp: Date.now() - 7200000,
-    likes: 24,
-    prayers: 0,
-    isMiracle: false,
-    isAnswered: false,
-    promotionTier: PromotionTier.NONE,
-    gifts: [],
-    comments: []
-  }
-];
-
 class BackendService {
-  private mockUsers: User[] = [...MOCK_USERS];
-  private mockPosts: Post[] = [...MOCK_POSTS];
-  private tithes: Tithe[] = [];
   private currentUser: User | null = null;
+  private mockPosts: Post[] = [];
 
   async login(email: string): Promise<User> {
     if (USE_REAL_DB && supabase) {
-      const { data, error } = await supabase.from('profiles').select('*').eq('email', email).single();
-      if (error || !data) throw new Error("User not found in database");
-      
-      const user: User = {
-        id: data.id,
-        name: `${data.first_name} ${data.last_name}`,
-        firstName: data.first_name,
-        lastName: data.last_name,
-        email: data.email,
-        dateOfBirth: data.date_of_birth,
-        nationality: data.nationality,
-        gender: data.gender,
-        religion: data.religion as Religion,
-        visibility: data.visibility as Visibility,
-        language: data.language as Language,
-        avatarUrl: data.avatar_url,
-        isPremium: data.is_premium
-      };
-      this.currentUser = user;
-      return user;
-    } else {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const user = this.mockUsers.find(u => u.email === email);
-      if (!user) throw new Error("User not found. Use sarah@example.com for demo.");
+      const { data, error } = await supabase.from('profiles').select('*, circle:circles(target_id)').eq('email', email).single();
+      if (error || !data) throw new Error("Usuario no encontrado.");
+      const user = this.mapDbUserToUser(data);
+      user.circleIds = data.circle?.map((c: any) => c.target_id) || [];
       this.currentUser = user;
       return user;
     }
+    throw new Error("Base de datos no configurada.");
   }
 
   async register(
-    firstName: string, 
-    lastName: string, 
-    email: string, 
-    religion: Religion, 
-    visibility: Visibility, 
-    language: Language,
-    dateOfBirth: string,
-    nationality: string,
-    gender: string
+    firstName: string, lastName: string, email: string, 
+    religion: Religion, visibility: Visibility, language: Language
   ): Promise<User> {
-    await new Promise(resolve => setTimeout(resolve, 800));
     const newUser: User = {
       id: `u${Date.now()}`,
       name: `${firstName} ${lastName}`,
-      firstName,
-      lastName,
-      email,
-      dateOfBirth,
-      nationality,
-      gender,
-      religion,
-      visibility,
-      language,
+      firstName, lastName, email, religion, visibility, language,
+      dateOfBirth: '1990-01-01', nationality: 'Global', gender: 'N/A',
       avatarUrl: `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=random`,
-      isPremium: false
+      isPremium: false, circleIds: []
     };
-    this.mockUsers.push(newUser);
+
+    if (USE_REAL_DB && supabase) {
+      await supabase.from('profiles').upsert([{
+        id: newUser.id, email: newUser.email, first_name: newUser.firstName,
+        last_name: newUser.lastName, religion: newUser.religion,
+        visibility: newUser.visibility, language: newUser.language,
+        avatar_url: newUser.avatarUrl
+      }]);
+    }
     this.currentUser = newUser;
     return newUser;
   }
 
-  async getFeed(viewer: User): Promise<Post[]> {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const now = Date.now();
-    
-    return this.mockPosts.filter(post => {
-      // Logic for religion-based visibility
-      const author = this.mockUsers.find(u => u.id === post.userId);
-      if (!author) return true; // Author info fallback
-      
-      if (author.visibility === Visibility.SAME_RELIGION) {
-        return author.religion === viewer.religion;
+  async toggleCircle(targetId: string): Promise<string[]> {
+    if (!this.currentUser) return [];
+    const isAdding = !this.currentUser.circleIds?.includes(targetId);
+
+    if (USE_REAL_DB && supabase) {
+      if (isAdding) {
+        await supabase.from('circles').insert([{ user_id: this.currentUser.id, target_id: targetId }]);
+        this.currentUser.circleIds = [...(this.currentUser.circleIds || []), targetId];
+      } else {
+        await supabase.from('circles').delete().eq('user_id', this.currentUser.id).eq('target_id', targetId);
+        this.currentUser.circleIds = (this.currentUser.circleIds || []).filter(id => id !== targetId);
       }
-      return true;
-    }).sort((a, b) => b.timestamp - a.timestamp);
+    }
+    return this.currentUser.circleIds || [];
+  }
+
+  async getFeed(viewer: User): Promise<Post[]> {
+    if (USE_REAL_DB && supabase) {
+      const { data } = await supabase.from('posts').select('*, comments(*)').order('promotion_tier', { ascending: false }).order('created_at', { ascending: false });
+      return data?.map((p: any) => this.mapDbPostToPost(p)) || [];
+    }
+    return this.mockPosts;
   }
 
   async createPost(content: string, user: User, isMiracle: boolean, promotionTier: PromotionTier): Promise<Post> {
-    await new Promise(resolve => setTimeout(resolve, 1000));
     const newPost: Post = {
-      id: `p${Date.now()}`,
-      userId: user.id,
-      authorName: user.name,
-      authorReligion: user.religion,
-      authorAvatarUrl: user.avatarUrl,
-      content,
-      language: user.language,
-      timestamp: Date.now(),
-      likes: 0,
-      prayers: 0,
-      isMiracle,
-      isAnswered: false,
-      promotionTier,
-      gifts: [],
-      comments: []
+      id: `p${Date.now()}`, userId: user.id, authorName: user.name,
+      authorReligion: user.religion, authorAvatarUrl: user.avatarUrl,
+      content, language: user.language, timestamp: Date.now(),
+      likes: 0, prayers: 0, isMiracle, isAnswered: false,
+      promotionTier, gifts: [], comments: []
     };
-    this.mockPosts.unshift(newPost);
+
+    if (USE_REAL_DB && supabase) {
+      await supabase.from('posts').insert([{
+        id: newPost.id, user_id: user.id, author_name: user.name,
+        author_religion: user.religion,
+        // Fix: Use user.avatarUrl as User interface has avatarUrl, not authorAvatarUrl
+        author_avatar_url: user.avatarUrl,
+        content: newPost.content, language: newPost.language,
+        is_miracle: newPost.isMiracle, promotion_tier: newPost.promotionTier
+      }]);
+    }
     return newPost;
   }
 
-  async interactPost(postId: string, type: 'like' | 'pray'): Promise<void> {
-    const post = this.mockPosts.find(p => p.id === postId);
-    if (post) {
-      if (type === 'pray') post.prayers += 1;
-      else post.likes += 1;
-    }
-  }
-
-  async addComment(postId: string, content: string, user: User): Promise<Comment> {
-    const post = this.mockPosts.find(p => p.id === postId);
-    if (!post) throw new Error("Post not found");
-
-    const newComment: Comment = {
-      id: `c${Date.now()}`,
-      userId: user.id,
-      authorName: user.name,
-      authorAvatarUrl: user.avatarUrl,
-      content,
-      timestamp: Date.now()
-    };
-    
-    post.comments.push(newComment);
-    return newComment;
-  }
-
-  async sendGift(postId: string, giftType: GiftType, sender: User): Promise<void> {
-    const post = this.mockPosts.find(p => p.id === postId);
-    if (post) {
-      post.gifts.push({
-        type: giftType,
-        senderName: sender.name,
-        timestamp: Date.now()
-      });
-    }
-  }
-
-  async markAsAnswered(postId: string): Promise<void> {
-    const post = this.mockPosts.find(p => p.id === postId);
-    if (post) post.isAnswered = true;
-  }
-
   async processTithe(userId: string, amount: number, method: PaymentMethod): Promise<Tithe> {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const newTithe: Tithe = {
-      id: `t-${Date.now()}`,
-      userId,
-      amount,
-      currency: 'USD',
-      method,
-      timestamp: Date.now()
-    };
-    this.tithes.push(newTithe);
-    return newTithe;
+    const tithe: Tithe = { id: `t${Date.now()}`, userId, amount, currency: 'USD', method, timestamp: Date.now() };
+    if (USE_REAL_DB && supabase) {
+      await supabase.from('tithes').insert([{ id: tithe.id, user_id: userId, amount, method }]);
+      if (amount >= 4.99) await supabase.from('profiles').update({ is_premium: true }).eq('id', userId);
+    }
+    return tithe;
   }
 
-  logout() {
-    this.currentUser = null;
+  async interactPost(postId: string, type: 'like' | 'pray') {
+    if (USE_REAL_DB && supabase) {
+      await supabase.rpc('increment_counter', { row_id: postId, column_name: type === 'like' ? 'likes' : 'prayers' });
+    }
   }
+
+  async addComment(postId: string, content: string, user: User) {
+    if (USE_REAL_DB && supabase) {
+      await supabase.from('comments').insert([{ post_id: postId, user_id: user.id, author_name: user.name, author_avatar_url: user.avatarUrl, content }]);
+    }
+    return { id: String(Date.now()), userId: user.id, authorName: user.name, authorAvatarUrl: user.avatarUrl, content, timestamp: Date.now() };
+  }
+
+  async markAsAnswered(postId: string) {
+    if (USE_REAL_DB && supabase) await supabase.from('posts').update({ is_answered: true }).eq('id', postId);
+  }
+
+  private mapDbUserToUser(data: any): User {
+    return {
+      id: data.id, name: `${data.first_name} ${data.last_name}`,
+      firstName: data.first_name, lastName: data.last_name, email: data.email,
+      dateOfBirth: data.date_of_birth, nationality: data.nationality, gender: data.gender,
+      religion: data.religion, visibility: data.visibility, language: data.language,
+      avatarUrl: data.avatar_url, isPremium: data.is_premium, circleIds: []
+    };
+  }
+
+  private mapDbPostToPost(p: any): Post {
+    return {
+      id: p.id, userId: p.user_id, authorName: p.author_name,
+      authorReligion: p.author_religion, authorAvatarUrl: p.author_avatar_url,
+      content: p.content, language: p.language,
+      timestamp: new Date(p.created_at).getTime(),
+      likes: p.likes || 0, prayers: p.prayers || 0,
+      isMiracle: p.is_miracle, isAnswered: p.is_answered,
+      promotionTier: p.promotion_tier, gifts: [],
+      comments: p.comments?.map((c: any) => ({
+        id: c.id, userId: c.user_id, authorName: c.author_name,
+        authorAvatarUrl: c.author_avatar_url, content: c.content,
+        timestamp: new Date(c.created_at).getTime()
+      })) || []
+    };
+  }
+
+  logout() { this.currentUser = null; }
 }
 
 export const mockBackend = new BackendService();
