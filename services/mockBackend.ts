@@ -69,6 +69,12 @@ class BackendService {
         await supabase.from('circles').delete().eq('user_id', this.currentUser.id).eq('target_id', targetId);
         this.currentUser.circleIds = (this.currentUser.circleIds || []).filter(id => id !== targetId);
       }
+    } else {
+      if (isAdding) {
+        this.currentUser.circleIds = [...(this.currentUser.circleIds || []), targetId];
+      } else {
+        this.currentUser.circleIds = (this.currentUser.circleIds || []).filter(id => id !== targetId);
+      }
     }
     return this.currentUser.circleIds || [];
   }
@@ -94,7 +100,6 @@ class BackendService {
       await supabase.from('posts').insert([{
         id: newPost.id, user_id: user.id, author_name: user.name,
         author_religion: user.religion,
-        // Fix: Use user.avatarUrl as User interface has avatarUrl, not authorAvatarUrl
         author_avatar_url: user.avatarUrl,
         content: newPost.content, language: newPost.language,
         is_miracle: newPost.isMiracle, promotion_tier: newPost.promotionTier
