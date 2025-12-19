@@ -3,22 +3,17 @@ import React, { useState } from 'react';
 import { Religion, Visibility, User, Language, SUPPORTED_LANGUAGES } from '../types';
 import { mockBackend } from '../services/mockBackend';
 import { Button } from './Button';
-import { Shield, UserPlus, Lock, Eye, BookOpen } from 'lucide-react';
+import { Shield, Languages, Lock, UserPlus, Globe } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (user: User) => void;
 }
-
-const COUNTRIES = [
-  "Argentina", "Chile", "Colombia", "España", "México", "Perú", "EE.UU.", "Otros"
-];
 
 export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Form State
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -30,85 +25,70 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-
     try {
       let user: User;
       if (isRegistering) {
-        user = await mockBackend.register(
-          firstName, lastName, email, religion, visibility, language,
-          "1990-01-01", "México", "Prefiero no decir"
-        );
+        user = await mockBackend.register(firstName, lastName, email, religion, visibility, language);
       } else {
         user = await mockBackend.login(email);
       }
       onLogin(user);
     } catch (err: any) {
-      setError(err.message || 'Error al conectar');
+      setError(err.message || 'Error de conexión');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4 py-12">
-      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-3xl shadow-2xl border border-slate-200">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-12">
+      <div className="max-w-md w-full space-y-8 bg-white p-12 rounded-[3.5rem] shadow-2xl border border-slate-100">
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-6">
-            <Shield className="h-8 w-8 text-white" />
+          <div className="mx-auto h-20 w-20 bg-indigo-600 rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-6">
+            <Shield className="h-10 w-10 text-white" />
           </div>
-          <h2 className="mt-6 text-3xl font-black text-slate-900">FaithCircle</h2>
-          <p className="text-slate-500 font-medium">Conecta con tu comunidad de fe</p>
+          <h2 className="mt-8 text-4xl font-black text-slate-900 tracking-tighter">PrayLink</h2>
+          <p className="text-slate-400 font-medium mt-2">La red global de fe y milagros</p>
         </div>
 
-        <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl text-center font-bold">
-              {error}
-            </div>
-          )}
+        <form className="mt-10 space-y-6" onSubmit={handleSubmit}>
+          {error && <div className="p-4 bg-red-50 text-red-600 text-xs rounded-2xl font-black uppercase text-center">{error}</div>}
           
           <div className="space-y-4">
-            {isRegistering ? (
+            {isRegistering && (
               <>
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="text" required placeholder="Nombre" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                  <input type="text" required placeholder="Apellido" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  <input type="text" required placeholder="Nombre" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
+                  <input type="text" required placeholder="Apellido" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
                 </div>
                 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-400 ml-1 uppercase">Tu Religión</label>
-                  <select value={religion} onChange={(e) => setReligion(e.target.value as Religion)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none appearance-none">
+                <div className="relative">
+                  <Globe className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
+                  <select value={religion} onChange={(e) => setReligion(e.target.value as Religion)} className="w-full pl-12 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none appearance-none font-bold">
                     {Object.values(Religion).map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
 
-                <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100 space-y-3">
-                  <p className="text-xs font-bold text-indigo-900 uppercase">Privacidad de tu fe</p>
-                  <div className="space-y-2">
-                    <label className="flex items-center space-x-3 cursor-pointer">
-                      <input type="radio" checked={visibility === Visibility.PUBLIC} onChange={() => setVisibility(Visibility.PUBLIC)} className="text-indigo-600" />
-                      <span className="text-sm font-medium text-slate-700">Mundo (Cualquiera puede verme)</span>
-                    </label>
-                    <label className="flex items-center space-x-3 cursor-pointer">
-                      <input type="radio" checked={visibility === Visibility.SAME_RELIGION} onChange={() => setVisibility(Visibility.SAME_RELIGION)} className="text-indigo-600" />
-                      <span className="text-sm font-medium text-slate-700">Solo mi Círculo de Fe</span>
-                    </label>
-                  </div>
+                <div className="relative">
+                  <Languages className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
+                  <select value={language} onChange={(e) => setLanguage(e.target.value as Language)} className="w-full pl-12 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none appearance-none font-bold">
+                    {SUPPORTED_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
                 </div>
               </>
-            ) : null}
+            )}
 
-            <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
           </div>
 
-          <Button type="submit" isLoading={loading} className="w-full py-4 rounded-xl text-lg font-bold shadow-lg shadow-indigo-100">
-            {isRegistering ? 'Crear Perfil Espiritual' : 'Entrar a mi Círculo'}
+          <Button type="submit" isLoading={loading} className="w-full py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-indigo-100 bg-indigo-600">
+            {isRegistering ? 'Crear Cuenta Espiritual' : 'Entrar al Altar'}
           </Button>
         </form>
 
         <div className="text-center pt-4">
-          <button type="button" onClick={() => setIsRegistering(!isRegistering)} className="text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
-            {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿Nuevo aquí? Regístrate'}
+          <button type="button" onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:text-indigo-600 transition-colors">
+            {isRegistering ? '¿Ya eres parte? Inicia sesión' : '¿Nuevo en PrayLink? Regístrate aquí'}
           </button>
         </div>
       </div>
