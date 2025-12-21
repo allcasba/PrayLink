@@ -34,7 +34,7 @@ class BackendService {
         .eq('id', authData.user.id)
         .single();
 
-      if (profileError) throw new Error("Perfil no encontrado. Verifique la base de datos.");
+      if (profileError) throw new Error("Profile not found in database. Ensure SQL schema is applied.");
 
       const user = this.mapDbUserToUser(profile);
       user.circleIds = profile.circles?.map((c: any) => c.target_id) || [];
@@ -42,7 +42,7 @@ class BackendService {
       return user;
     }
     
-    return this.register("Demo", "User", email, Religion.OTHER, Visibility.PUBLIC, "Spanish", "password");
+    return this.register("Demo", "User", email, Religion.OTHER, Visibility.PUBLIC, "English", "password");
   }
 
   async register(
@@ -52,6 +52,7 @@ class BackendService {
   ): Promise<User> {
     
     if (USE_REAL_DB && supabase) {
+      // 1. Registro en Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password: password || 'default_pass',
@@ -62,28 +63,54 @@ class BackendService {
             religion: religion,
             visibility: visibility,
             language: language,
-            avatar_url: avatarUrl // Enviamos el avatar capturado (base64)
+            avatar_url: avatarUrl
           }
         }
       });
 
-      if (authError) throw new Error(authError.message);
-      if (!authData.user) throw new Error("No se pudo crear el usuario.");
+      if (authError) {
+        // Manejar error de contraseña común/comprometida
+        if (authError.message.includes("compromised")) {
+          throw new Error("Security check: This password is too common. Please use a stronger, unique password.");
+        }
+        throw new Error(authError.message);
+      }
+      
+      if (!authData.user) throw new Error("User creation failed on Auth provider.");
 
       const userId = authData.user.id;
       
-      const newUser: User = {
-        id: userId,
-        name: `${firstName} ${lastName}`,
-        firstName, lastName, email, religion, visibility, language,
-        dateOfBirth: '1990-01-01', nationality: 'Global', gender: 'N/A',
-        avatarUrl: avatarUrl || `https://ui-avatars.com/api/?name=${firstName}+${lastName}`,
-        isPremium: false, circleIds: []
-      };
+      // 2. Verificación y espera de sincronización del perfil
+      // Aumentamos los reintentos y el tiempo ya que el trigger AFTER INSERT puede tener latencia
+      let profile = null;
+      let lastError = null;
+
+      for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 800)); // 800ms entre intentos
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        
+        if (data && !error) {
+          profile = data;
+          break;
+        }
+        lastError = error;
+      }
+
+      if (!profile) {
+        console.error("Profile sync error:", lastError);
+        throw new Error("Registration partially successful, but profile sync failed. Please try logging in manually.");
+      }
+
+      const newUser = this.mapDbUserToUser(profile);
       this.currentUser = newUser;
       return newUser;
     }
 
+    // Fallback Mock
     const mockUser: User = {
       id: `u${Date.now()}`,
       name: `${firstName} ${lastName}`,
@@ -107,7 +134,7 @@ class BackendService {
         if (data.religion) dbUpdate.religion = data.religion;
 
         const { error } = await supabase.from('profiles').update(dbUpdate).eq('id', userId);
-        if (error) throw new Error("Fallo al actualizar perfil.");
+        if (error) throw new Error("Update failed.");
       }
       this.currentUser = { ...this.currentUser, ...data };
       if (data.firstName || data.lastName) {
@@ -115,10 +142,9 @@ class BackendService {
       }
       return this.currentUser;
     }
-    throw new Error("No autorizado.");
+    throw new Error("Unauthorized.");
   }
 
-  // ... Resto del servicio (getFeed, createPost, etc.) ...
   async getFeed(viewer: User): Promise<Post[]> {
     if (USE_REAL_DB && supabase) {
       try {
@@ -131,7 +157,7 @@ class BackendService {
         if (error) throw error;
         if (data) return data.map((p: any) => this.mapDbPostToPost(p));
       } catch (e) {
-        console.error("Error al cargar altar:", e);
+        console.error("Feed error:", e);
       }
     }
     return this.mockPosts;
@@ -151,24 +177,11 @@ class BackendService {
         author_avatar_url: user.avatarUrl, content: newPost.content, language: newPost.language,
         is_miracle: newPost.isMiracle, promotion_tier: newPost.promotionTier
       }]);
-      if (error) console.error("Error al insertar post:", error);
+      if (error) console.error("Post creation error:", error);
     } else {
       this.mockPosts = [newPost, ...this.mockPosts];
     }
     return newPost;
-  }
-
-  async processTithe(userId: string, amount: number, method: PaymentMethod): Promise<Tithe> {
-    const titheId = `t${Date.now()}`;
-    const tithe: Tithe = { id: titheId, userId, amount, currency: 'USD', method, timestamp: Date.now() };
-    if (USE_REAL_DB && supabase) {
-      await supabase.from('tithes').insert([{ id: tithe.id, user_id: userId, amount: amount, method: method }]);
-      if (amount >= 9.99) {
-        await supabase.from('profiles').update({ is_premium: true }).eq('id', userId);
-        if (this.currentUser) this.currentUser.isPremium = true;
-      }
-    }
-    return tithe;
   }
 
   async interactPost(postId: string, type: 'like' | 'pray') {
@@ -193,13 +206,50 @@ class BackendService {
     return this.currentUser.circleIds || [];
   }
 
+  async processTithe(userId: string, amount: number, method: PaymentMethod): Promise<Tithe> {
+    const tithe: Tithe = {
+      id: `t${Date.now()}`,
+      userId,
+      amount,
+      currency: 'USD',
+      method,
+      timestamp: Date.now()
+    };
+
+    if (USE_REAL_DB && supabase) {
+      const { error } = await supabase.from('tithes').insert([{
+        id: tithe.id,
+        user_id: userId,
+        amount: amount,
+        currency: 'USD',
+        method: method,
+        created_at: new Date(tithe.timestamp).toISOString()
+      }]);
+      
+      if (error) console.error("Tithe error:", error);
+      
+      const { error: upgradeError } = await supabase
+        .from('profiles')
+        .update({ is_premium: true })
+        .eq('id', userId);
+        
+      if (upgradeError) console.error("Upgrade error:", upgradeError);
+    }
+    
+    if (this.currentUser && this.currentUser.id === userId) {
+      this.currentUser.isPremium = true;
+    }
+
+    return tithe;
+  }
+
   private mapDbUserToUser(data: any): User {
     return {
-      id: data.id, name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Fiel',
+      id: data.id, name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Faithful',
       firstName: data.first_name || '', lastName: data.last_name || '', email: data.email,
       dateOfBirth: data.date_of_birth || '1990-01-01', nationality: data.nationality || 'Global', gender: data.gender || 'N/A',
       religion: (data.religion as Religion) || Religion.OTHER, visibility: (data.visibility as Visibility) || Visibility.PUBLIC, 
-      language: (data.language as Language) || 'Spanish',
+      language: (data.language as Language) || 'English',
       avatarUrl: data.avatar_url || `https://ui-avatars.com/api/?name=${data.email}`, isPremium: data.is_premium || false, 
       circleIds: []
     };
@@ -208,7 +258,7 @@ class BackendService {
   private mapDbPostToPost(p: any): Post {
     return {
       id: p.id, userId: p.user_id, authorName: p.author_name, authorReligion: (p.author_religion as Religion) || Religion.OTHER, 
-      authorAvatarUrl: p.author_avatar_url, content: p.content, language: (p.language as Language) || 'Spanish',
+      authorAvatarUrl: p.author_avatar_url, content: p.content, language: (p.language as Language) || 'English',
       timestamp: new Date(p.created_at).getTime(), likes: p.likes || 0, prayers: p.prayers || 0,
       isMiracle: p.is_miracle || false, isAnswered: p.is_answered || false,
       promotionTier: (p.promotion_tier as PromotionTier) || PromotionTier.NONE, gifts: [],
