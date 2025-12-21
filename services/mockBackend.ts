@@ -35,8 +35,7 @@ class BackendService {
         .single();
 
       if (profileError) {
-        console.error("Login profile fetch error:", profileError);
-        throw new Error("Su perfil no fue encontrado. Es posible que el registro no se haya completado correctamente.");
+        throw new Error("Perfil no encontrado. Verifique que haya confirmado su correo electrónico.");
       }
 
       const user = this.mapDbUserToUser(profile);
@@ -71,21 +70,21 @@ class BackendService {
         }
       });
 
-      if (authError) {
-        if (authError.message.includes("compromised")) {
-          throw new Error("Seguridad: Esta contraseña es muy común. Use una más compleja.");
-        }
-        throw new Error(authError.message);
-      }
-      
-      if (!authData.user) throw new Error("Error crítico: No se recibió ID de usuario.");
+      if (authError) throw new Error(authError.message);
+      if (!authData.user) throw new Error("Error en el registro: No se pudo crear el usuario.");
 
       const userId = authData.user.id;
+      const session = authData.session;
+
+      // Si no hay sesión, es que se requiere confirmación de email
+      if (!session) {
+        throw new Error("¡Registro exitoso! Por favor, revisa tu correo electrónico para confirmar tu cuenta antes de entrar.");
+      }
       
-      // 2. Espera y verificación de sincronización del perfil
+      // 2. Esperar a que el trigger cree el perfil
       let profile = null;
       let attempts = 0;
-      const maxAttempts = 10;
+      const maxAttempts = 15; // Aumentamos la paciencia a 15 segundos
 
       while (attempts < maxAttempts) {
         attempts++;
@@ -102,10 +101,10 @@ class BackendService {
           break;
         }
 
-        // Si después de 3 segundos no hay perfil, forzamos la creación manual
-        if (attempts === 3 && !profile) {
-          console.warn("Trigger is taking too long. Attempting manual insert...");
-          const { error: insertError } = await supabase.from('profiles').upsert({
+        // Respaldo manual solo si tenemos sesión activa
+        if (attempts === 5 && !profile && session) {
+          console.warn("Trigger demorado. Forzando creación de perfil...");
+          await supabase.from('profiles').upsert({
             id: userId,
             email: email,
             first_name: firstName,
@@ -115,15 +114,11 @@ class BackendService {
             language: language,
             avatar_url: avatarUrl || `https://ui-avatars.com/api/?name=${firstName}`
           });
-          
-          if (insertError) {
-            console.error("Manual insert failed:", insertError);
-          }
         }
       }
 
       if (!profile) {
-        throw new Error("El usuario se creó pero el perfil no pudo sincronizarse. Intente iniciar sesión.");
+        throw new Error("Tu cuenta se creó pero el perfil tarda en aparecer. Por favor, intenta iniciar sesión en unos instantes.");
       }
 
       const newUser = this.mapDbUserToUser(profile);
@@ -155,7 +150,7 @@ class BackendService {
         if (data.religion) dbUpdate.religion = data.religion;
 
         const { error } = await supabase.from('profiles').update(dbUpdate).eq('id', userId);
-        if (error) throw new Error("Update failed.");
+        if (error) throw new Error("Error al actualizar el perfil.");
       }
       this.currentUser = { ...this.currentUser, ...data };
       if (data.firstName || data.lastName) {
@@ -163,7 +158,7 @@ class BackendService {
       }
       return this.currentUser;
     }
-    throw new Error("Unauthorized.");
+    throw new Error("No autorizado.");
   }
 
   async getFeed(viewer: User): Promise<Post[]> {
@@ -178,7 +173,7 @@ class BackendService {
         if (error) throw error;
         if (data) return data.map((p: any) => this.mapDbPostToPost(p));
       } catch (e) {
-        console.error("Feed error:", e);
+        console.error("Error al obtener feed:", e);
       }
     }
     return this.mockPosts;
@@ -198,7 +193,7 @@ class BackendService {
         author_avatar_url: user.avatarUrl, content: newPost.content, language: newPost.language,
         is_miracle: newPost.isMiracle, promotion_tier: newPost.promotionTier
       }]);
-      if (error) console.error("Post error:", error);
+      if (error) console.error("Error al crear post:", error);
     } else {
       this.mockPosts = [newPost, ...this.mockPosts];
     }
@@ -247,7 +242,7 @@ class BackendService {
         created_at: new Date(tithe.timestamp).toISOString()
       }]);
       
-      if (error) console.error("Tithe error:", error);
+      if (error) console.error("Error en el diezmo:", error);
       
       await supabase.from('profiles').update({ is_premium: true }).eq('id', userId);
     }
