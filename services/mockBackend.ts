@@ -34,7 +34,10 @@ class BackendService {
         .eq('id', authData.user.id)
         .single();
 
-      if (profileError) throw new Error("Profile not found in database. Ensure SQL schema is applied.");
+      if (profileError) {
+        console.error("Login profile fetch error:", profileError);
+        throw new Error("Su perfil no fue encontrado en la base de datos. Por favor, contacte a soporte.");
+      }
 
       const user = this.mapDbUserToUser(profile);
       user.circleIds = profile.circles?.map((c: any) => c.target_id) || [];
@@ -69,24 +72,25 @@ class BackendService {
       });
 
       if (authError) {
-        // Manejar error de contraseña común/comprometida
         if (authError.message.includes("compromised")) {
-          throw new Error("Security check: This password is too common. Please use a stronger, unique password.");
+          throw new Error("Seguridad: Esta contraseña es muy común. Use una más compleja.");
         }
         throw new Error(authError.message);
       }
       
-      if (!authData.user) throw new Error("User creation failed on Auth provider.");
+      if (!authData.user) throw new Error("Error crítico: El servidor no devolvió un ID de usuario.");
 
       const userId = authData.user.id;
       
-      // 2. Verificación y espera de sincronización del perfil
-      // Aumentamos los reintentos y el tiempo ya que el trigger AFTER INSERT puede tener latencia
+      // 2. Espera y verificación de sincronización del perfil
       let profile = null;
-      let lastError = null;
+      let attempts = 0;
+      const maxAttempts = 8;
 
-      for (let i = 0; i < 5; i++) {
-        await new Promise(resolve => setTimeout(resolve, 800)); // 800ms entre intentos
+      while (attempts < maxAttempts) {
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo entre intentos
+
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -97,12 +101,25 @@ class BackendService {
           profile = data;
           break;
         }
-        lastError = error;
+
+        // Si después de 4 intentos no hay perfil, intentamos una inserción manual como respaldo (Fallback)
+        if (attempts === 4 && !profile) {
+          console.warn("Trigger seems slow. Attempting manual profile fallback...");
+          await supabase.from('profiles').upsert({
+            id: userId,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            religion: religion,
+            visibility: visibility,
+            language: language,
+            avatar_url: avatarUrl || `https://ui-avatars.com/api/?name=${firstName}`
+          });
+        }
       }
 
       if (!profile) {
-        console.error("Profile sync error:", lastError);
-        throw new Error("Registration partially successful, but profile sync failed. Please try logging in manually.");
+        throw new Error("El registro fue exitoso, pero la creación de su perfil está tardando. Por favor, intente iniciar sesión manualmente en unos segundos.");
       }
 
       const newUser = this.mapDbUserToUser(profile);
@@ -110,7 +127,7 @@ class BackendService {
       return newUser;
     }
 
-    // Fallback Mock
+    // Mock Fallback
     const mockUser: User = {
       id: `u${Date.now()}`,
       name: `${firstName} ${lastName}`,
@@ -177,7 +194,7 @@ class BackendService {
         author_avatar_url: user.avatarUrl, content: newPost.content, language: newPost.language,
         is_miracle: newPost.isMiracle, promotion_tier: newPost.promotionTier
       }]);
-      if (error) console.error("Post creation error:", error);
+      if (error) console.error("Post error:", error);
     } else {
       this.mockPosts = [newPost, ...this.mockPosts];
     }
@@ -186,6 +203,7 @@ class BackendService {
 
   async interactPost(postId: string, type: 'like' | 'pray') {
     if (USE_REAL_DB && supabase) {
+      // Usar el nombre calificado del RPC
       await supabase.rpc('increment_counter', { row_id: postId, column_name: type === 'like' ? 'likes' : 'prayers' });
     }
   }
@@ -228,12 +246,7 @@ class BackendService {
       
       if (error) console.error("Tithe error:", error);
       
-      const { error: upgradeError } = await supabase
-        .from('profiles')
-        .update({ is_premium: true })
-        .eq('id', userId);
-        
-      if (upgradeError) console.error("Upgrade error:", upgradeError);
+      await supabase.from('profiles').update({ is_premium: true }).eq('id', userId);
     }
     
     if (this.currentUser && this.currentUser.id === userId) {
@@ -245,7 +258,7 @@ class BackendService {
 
   private mapDbUserToUser(data: any): User {
     return {
-      id: data.id, name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Faithful',
+      id: data.id, name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Fiel',
       firstName: data.first_name || '', lastName: data.last_name || '', email: data.email,
       dateOfBirth: data.date_of_birth || '1990-01-01', nationality: data.nationality || 'Global', gender: data.gender || 'N/A',
       religion: (data.religion as Religion) || Religion.OTHER, visibility: (data.visibility as Visibility) || Visibility.PUBLIC, 
