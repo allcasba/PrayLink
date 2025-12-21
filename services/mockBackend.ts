@@ -36,7 +36,7 @@ class BackendService {
 
       if (profileError) {
         console.error("Login profile fetch error:", profileError);
-        throw new Error("Su perfil no fue encontrado en la base de datos. Por favor, contacte a soporte.");
+        throw new Error("Su perfil no fue encontrado. Es posible que el registro no se haya completado correctamente.");
       }
 
       const user = this.mapDbUserToUser(profile);
@@ -78,18 +78,18 @@ class BackendService {
         throw new Error(authError.message);
       }
       
-      if (!authData.user) throw new Error("Error crítico: El servidor no devolvió un ID de usuario.");
+      if (!authData.user) throw new Error("Error crítico: No se recibió ID de usuario.");
 
       const userId = authData.user.id;
       
       // 2. Espera y verificación de sincronización del perfil
       let profile = null;
       let attempts = 0;
-      const maxAttempts = 8;
+      const maxAttempts = 10;
 
       while (attempts < maxAttempts) {
         attempts++;
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo entre intentos
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         const { data, error } = await supabase
           .from('profiles')
@@ -102,10 +102,10 @@ class BackendService {
           break;
         }
 
-        // Si después de 4 intentos no hay perfil, intentamos una inserción manual como respaldo (Fallback)
-        if (attempts === 4 && !profile) {
-          console.warn("Trigger seems slow. Attempting manual profile fallback...");
-          await supabase.from('profiles').upsert({
+        // Si después de 3 segundos no hay perfil, forzamos la creación manual
+        if (attempts === 3 && !profile) {
+          console.warn("Trigger is taking too long. Attempting manual insert...");
+          const { error: insertError } = await supabase.from('profiles').upsert({
             id: userId,
             email: email,
             first_name: firstName,
@@ -115,11 +115,15 @@ class BackendService {
             language: language,
             avatar_url: avatarUrl || `https://ui-avatars.com/api/?name=${firstName}`
           });
+          
+          if (insertError) {
+            console.error("Manual insert failed:", insertError);
+          }
         }
       }
 
       if (!profile) {
-        throw new Error("El registro fue exitoso, pero la creación de su perfil está tardando. Por favor, intente iniciar sesión manualmente en unos segundos.");
+        throw new Error("El usuario se creó pero el perfil no pudo sincronizarse. Intente iniciar sesión.");
       }
 
       const newUser = this.mapDbUserToUser(profile);
@@ -203,7 +207,6 @@ class BackendService {
 
   async interactPost(postId: string, type: 'like' | 'pray') {
     if (USE_REAL_DB && supabase) {
-      // Usar el nombre calificado del RPC
       await supabase.rpc('increment_counter', { row_id: postId, column_name: type === 'like' ? 'likes' : 'prayers' });
     }
   }
