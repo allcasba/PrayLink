@@ -26,20 +26,30 @@ class BackendService {
         password: password || 'default_pass' 
       });
 
-      if (authError) throw new Error(authError.message);
+      if (authError) {
+        if (authError.message.includes("quota")) {
+          throw new Error("El almacenamiento de su navegador está lleno. Por favor, limpie su historial o use el modo incógnito.");
+        }
+        throw new Error(authError.message);
+      }
 
+      // 1. Obtener Perfil
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*, circles:circles(target_id)')
+        .select('*')
         .eq('id', authData.user.id)
         .single();
 
-      if (profileError) {
-        throw new Error("Perfil no encontrado. Verifique que haya confirmado su correo electrónico.");
-      }
+      if (profileError) throw new Error("Perfil no encontrado. ¿Confirmó su correo?");
+
+      // 2. Obtener Círculos por separado para evitar fallos de join
+      const { data: circles } = await supabase
+        .from('circles')
+        .select('target_id')
+        .eq('user_id', authData.user.id);
 
       const user = this.mapDbUserToUser(profile);
-      user.circleIds = profile.circles?.map((c: any) => c.target_id) || [];
+      user.circleIds = circles?.map((c: any) => c.target_id) || [];
       this.currentUser = user;
       return user;
     }
@@ -71,24 +81,19 @@ class BackendService {
       });
 
       if (authError) throw new Error(authError.message);
-      if (!authData.user) throw new Error("Error en el registro: No se pudo crear el usuario.");
+      if (!authData.user) throw new Error("Error: No se pudo crear el usuario.");
 
       const userId = authData.user.id;
       const session = authData.session;
 
-      // Si no hay sesión, es que se requiere confirmación de email
       if (!session) {
-        throw new Error("¡Registro exitoso! Por favor, revisa tu correo electrónico para confirmar tu cuenta antes de entrar.");
+        throw new Error("¡Registro casi listo! Por favor, confirma tu correo para activar tu perfil.");
       }
       
-      // 2. Esperar a que el trigger cree el perfil
+      // 2. Sincronización de Perfil con reintentos
       let profile = null;
-      let attempts = 0;
-      const maxAttempts = 15; // Aumentamos la paciencia a 15 segundos
-
-      while (attempts < maxAttempts) {
-        attempts++;
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 1200));
 
         const { data, error } = await supabase
           .from('profiles')
@@ -101,9 +106,8 @@ class BackendService {
           break;
         }
 
-        // Respaldo manual solo si tenemos sesión activa
-        if (attempts === 5 && !profile && session) {
-          console.warn("Trigger demorado. Forzando creación de perfil...");
+        // Respaldo manual si falla el trigger
+        if (i === 3 && !profile) {
           await supabase.from('profiles').upsert({
             id: userId,
             email: email,
@@ -117,9 +121,7 @@ class BackendService {
         }
       }
 
-      if (!profile) {
-        throw new Error("Tu cuenta se creó pero el perfil tarda en aparecer. Por favor, intenta iniciar sesión en unos instantes.");
-      }
+      if (!profile) throw new Error("Error de sincronización. Por favor, intenta iniciar sesión.");
 
       const newUser = this.mapDbUserToUser(profile);
       this.currentUser = newUser;
@@ -132,7 +134,7 @@ class BackendService {
       name: `${firstName} ${lastName}`,
       firstName, lastName, email, religion, visibility, language,
       dateOfBirth: '1990-01-01', nationality: 'Global', gender: 'N/A',
-      avatarUrl: avatarUrl || `https://ui-avatars.com/api/?name=${firstName}+${lastName}`,
+      avatarUrl: avatarUrl || `https://ui-avatars.com/api/?name=${firstName}`,
       isPremium: false, circleIds: []
     };
     this.currentUser = mockUser;
@@ -150,12 +152,9 @@ class BackendService {
         if (data.religion) dbUpdate.religion = data.religion;
 
         const { error } = await supabase.from('profiles').update(dbUpdate).eq('id', userId);
-        if (error) throw new Error("Error al actualizar el perfil.");
+        if (error) throw new Error("Error de actualización.");
       }
       this.currentUser = { ...this.currentUser, ...data };
-      if (data.firstName || data.lastName) {
-        this.currentUser.name = `${this.currentUser.firstName} ${this.currentUser.lastName}`;
-      }
       return this.currentUser;
     }
     throw new Error("No autorizado.");
@@ -163,18 +162,11 @@ class BackendService {
 
   async getFeed(viewer: User): Promise<Post[]> {
     if (USE_REAL_DB && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('posts')
-          .select('*, comments(*)')
-          .order('promotion_tier', { ascending: false })
-          .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        if (data) return data.map((p: any) => this.mapDbPostToPost(p));
-      } catch (e) {
-        console.error("Error al obtener feed:", e);
-      }
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (data) return data.map((p: any) => this.mapDbPostToPost(p));
     }
     return this.mockPosts;
   }
@@ -188,12 +180,11 @@ class BackendService {
       promotionTier, gifts: [], comments: []
     };
     if (USE_REAL_DB && supabase) {
-      const { error } = await supabase.from('posts').insert([{
+      await supabase.from('posts').insert([{
         id: newPost.id, user_id: user.id, author_name: user.name, author_religion: user.religion, 
         author_avatar_url: user.avatarUrl, content: newPost.content, language: newPost.language,
         is_miracle: newPost.isMiracle, promotion_tier: newPost.promotionTier
       }]);
-      if (error) console.error("Error al crear post:", error);
     } else {
       this.mockPosts = [newPost, ...this.mockPosts];
     }
@@ -223,34 +214,12 @@ class BackendService {
   }
 
   async processTithe(userId: string, amount: number, method: PaymentMethod): Promise<Tithe> {
-    const tithe: Tithe = {
-      id: `t${Date.now()}`,
-      userId,
-      amount,
-      currency: 'USD',
-      method,
-      timestamp: Date.now()
-    };
-
+    const tithe: Tithe = { id: `t${Date.now()}`, userId, amount, currency: 'USD', method, timestamp: Date.now() };
     if (USE_REAL_DB && supabase) {
-      const { error } = await supabase.from('tithes').insert([{
-        id: tithe.id,
-        user_id: userId,
-        amount: amount,
-        currency: 'USD',
-        method: method,
-        created_at: new Date(tithe.timestamp).toISOString()
-      }]);
-      
-      if (error) console.error("Error en el diezmo:", error);
-      
+      await supabase.from('tithes').insert([{ id: tithe.id, user_id: userId, amount, method, currency: 'USD' }]);
       await supabase.from('profiles').update({ is_premium: true }).eq('id', userId);
     }
-    
-    if (this.currentUser && this.currentUser.id === userId) {
-      this.currentUser.isPremium = true;
-    }
-
+    if (this.currentUser) this.currentUser.isPremium = true;
     return tithe;
   }
 
@@ -272,11 +241,7 @@ class BackendService {
       authorAvatarUrl: p.author_avatar_url, content: p.content, language: (p.language as Language) || 'English',
       timestamp: new Date(p.created_at).getTime(), likes: p.likes || 0, prayers: p.prayers || 0,
       isMiracle: p.is_miracle || false, isAnswered: p.is_answered || false,
-      promotionTier: (p.promotion_tier as PromotionTier) || PromotionTier.NONE, gifts: [],
-      comments: p.comments?.map((c: any) => ({
-        id: c.id, userId: c.user_id, authorName: c.author_name, authorAvatarUrl: c.author_avatar_url, content: c.content,
-        timestamp: new Date(c.created_at).getTime()
-      })) || []
+      promotionTier: (p.promotion_tier as PromotionTier) || PromotionTier.NONE, gifts: [], comments: []
     };
   }
 
