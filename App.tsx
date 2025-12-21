@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Auth } from './components/Auth.tsx';
 import { Layout } from './components/Layout.tsx';
@@ -7,9 +6,9 @@ import { SpiritualGuide } from './components/SpiritualGuide.tsx';
 import { TithingModal } from './components/TithingModal.tsx';
 import { LandingPage } from './components/LandingPage.tsx';
 import { Button } from './components/Button.tsx';
-import { User, Post, PromotionTier, UI_TRANSLATIONS } from './types.ts';
+import { User, Post, PromotionTier, Language, UI_TRANSLATIONS, SUPPORTED_LANGUAGES } from './types.ts';
 import { mockBackend } from './services/mockBackend.ts';
-import { Send, Flame, Zap, ArrowRight, Users, Globe, Info } from 'lucide-react';
+import { Send, Flame, Zap, ArrowRight, Users, Globe, Info, Languages } from 'lucide-react';
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
@@ -21,11 +20,30 @@ export default function App() {
   const [isMiracleRequest, setIsMiracleRequest] = useState(false);
   const [showTithingModal, setShowTithingModal] = useState(false);
   const [showSpiritualGuide, setShowSpiritualGuide] = useState(false);
+  
+  // Detection logic for initial language
+  const [appLanguage, setAppLanguage] = useState<Language>(() => {
+    const browserLang = navigator.language.split('-')[0].toLowerCase();
+    const mapping: Record<string, Language> = {
+      'es': 'Spanish',
+      'en': 'English',
+      'fr': 'French',
+      'de': 'German',
+      'ar': 'Arabic',
+      'pt': 'Portuguese',
+      'hi': 'Hindi',
+      'he': 'Hebrew'
+    };
+    return mapping[browserLang] || 'English';
+  });
 
-  const t = currentUser ? (UI_TRANSLATIONS[currentUser.language] || UI_TRANSLATIONS['Spanish']) : UI_TRANSLATIONS['Spanish'];
+  const t = UI_TRANSLATIONS[appLanguage] || UI_TRANSLATIONS['English'];
 
   useEffect(() => {
-    if (currentUser) loadFeed();
+    if (currentUser) {
+      setAppLanguage(currentUser.language);
+      loadFeed();
+    }
   }, [currentUser]);
 
   const loadFeed = async () => {
@@ -63,8 +81,33 @@ export default function App() {
     return true;
   });
 
-  if (showLanding && !currentUser) return <LandingPage onGetStarted={() => setShowLanding(false)} />;
-  if (!currentUser) return <Auth onLogin={setCurrentUser} />;
+  const handleLanguageChange = (lang: Language) => {
+    setAppLanguage(lang);
+    if (currentUser) {
+      mockBackend.updateProfile(currentUser.id, { language: lang });
+      setCurrentUser({...currentUser, language: lang});
+    }
+  };
+
+  if (showLanding && !currentUser) return <LandingPage onGetStarted={() => setShowLanding(false)} currentLanguage={appLanguage} onLanguageChange={handleLanguageChange} />;
+  
+  if (!currentUser) return (
+    <div className="relative">
+      <div className="absolute top-10 right-10 z-[100]">
+        <div className="flex items-center space-x-2 bg-white/50 backdrop-blur-md p-2 rounded-full border border-white/20 shadow-lg">
+          <Languages className="h-4 w-4 text-slate-400" />
+          <select 
+            value={appLanguage} 
+            onChange={(e) => handleLanguageChange(e.target.value as Language)}
+            className="bg-transparent text-[10px] font-black uppercase outline-none border-none cursor-pointer"
+          >
+            {SUPPORTED_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+          </select>
+        </div>
+      </div>
+      <Auth onLogin={setCurrentUser} initialLanguage={appLanguage} />
+    </div>
+  );
 
   return (
     <Layout 
@@ -73,6 +116,8 @@ export default function App() {
       onOpenGuide={() => setShowSpiritualGuide(true)}
       onOpenTithe={() => setShowTithingModal(true)}
       onUpdateUser={setCurrentUser}
+      currentLanguage={appLanguage}
+      onLanguageChange={handleLanguageChange}
     >
       <div className="bg-slate-900 text-white p-8 rounded-[3rem] mb-12 flex items-center justify-between shadow-2xl relative overflow-hidden">
         <div className="flex items-center space-x-6 relative z-10">
@@ -132,7 +177,7 @@ export default function App() {
           <div className="text-center py-20 animate-pulse text-[10px] font-black uppercase tracking-[0.5em] text-slate-300">{t['loading_souls']}</div>
         ) : filteredPosts.length > 0 ? (
           filteredPosts.map(post => (
-            <PostCard key={post.id} post={post} userLanguage={currentUser.language} currentUser={currentUser} />
+            <PostCard key={post.id} post={post} userLanguage={appLanguage} currentUser={currentUser} />
           ))
         ) : (
           <div className="text-center py-20">
