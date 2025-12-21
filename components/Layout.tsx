@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
-import { User, UI_TRANSLATIONS } from '../types';
+import { User, UI_TRANSLATIONS, Language, SUPPORTED_LANGUAGES } from '../types';
 import { Button } from './Button';
-import { LogOut, Sun, Crown, Sparkles, Heart, Hand, Camera, X } from 'lucide-react';
+import { LogOut, Sun, Crown, Sparkles, Heart, Hand, Camera, X, Languages } from 'lucide-react';
 import { mockBackend } from '../services/mockBackend';
 
 interface LayoutProps {
@@ -11,11 +10,13 @@ interface LayoutProps {
   onOpenGuide: () => void;
   onOpenTithe: () => void;
   onUpdateUser: (user: User) => void;
+  currentLanguage: Language;
+  onLanguageChange: (lang: Language) => void;
   children: React.ReactNode;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ user, onLogout, onOpenGuide, onOpenTithe, onUpdateUser, children }) => {
-  const t = UI_TRANSLATIONS[user.language] || UI_TRANSLATIONS['Spanish'];
+export const Layout: React.FC<LayoutProps> = ({ user, onLogout, onOpenGuide, onOpenTithe, onUpdateUser, currentLanguage, onLanguageChange, children }) => {
+  const t = UI_TRANSLATIONS[currentLanguage] || UI_TRANSLATIONS['English'];
   const [isChangingAvatar, setIsChangingAvatar] = useState(false);
   const [newAvatarUrl, setNewAvatarUrl] = useState(user.avatarUrl);
   const [savingAvatar, setSavingAvatar] = useState(false);
@@ -49,6 +50,16 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, onOpenGuide, onO
             )}
           </div>
           <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+              <Languages className="h-4 w-4 text-slate-400" />
+              <select 
+                value={currentLanguage} 
+                onChange={(e) => onLanguageChange(e.target.value as Language)}
+                className="bg-transparent text-[9px] font-black uppercase outline-none border-none cursor-pointer"
+              >
+                {SUPPORTED_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
             <div className="flex items-center space-x-3 px-4 py-2 bg-slate-50 rounded-2xl border border-slate-100">
               <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-xl object-cover shadow-sm" />
               <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{user.firstName}</p>

@@ -1,17 +1,16 @@
-
 import React from 'react';
 import { Button } from './Button';
-import { BookHeart, Users, Zap, Globe, Flame, Sparkles, Hand, ArrowRight } from 'lucide-react';
-import { UI_TRANSLATIONS } from '../types';
+import { BookHeart, Users, Zap, Globe, Flame, Sparkles, Hand, ArrowRight, Languages } from 'lucide-react';
+import { UI_TRANSLATIONS, Language, SUPPORTED_LANGUAGES } from '../types';
 
 interface LandingPageProps {
   onGetStarted: () => void;
+  currentLanguage: Language;
+  onLanguageChange: (lang: Language) => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
-  // Landing is mostly static, but we'll use Spanish as base for the complex copy, 
-  // and the translation keys for the primary CTAs.
-  const t = UI_TRANSLATIONS['Spanish']; // Default to Spanish landing for now as it has specific copy
+export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, currentLanguage, onLanguageChange }) => {
+  const t = UI_TRANSLATIONS[currentLanguage] || UI_TRANSLATIONS['English'];
 
   return (
     <div className="min-h-screen bg-white selection:bg-indigo-100 selection:text-indigo-900">
@@ -24,9 +23,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             </div>
             <span className="ml-3 text-2xl font-black text-slate-900 tracking-tighter">PrayLink<span className="text-indigo-600">.net</span></span>
           </div>
-          <div className="hidden md:flex space-x-10">
-            <a href="#mission" className="text-slate-500 hover:text-indigo-600 font-bold text-xs uppercase tracking-[0.2em] transition-colors">La Ciencia de la Fe</a>
-            <a href="#power" className="text-slate-500 hover:text-indigo-600 font-bold text-xs uppercase tracking-[0.2em] transition-colors">Ofrenda de Luz</a>
+          <div className="hidden md:flex space-x-10 items-center">
+            <a href="#mission" className="text-slate-500 hover:text-indigo-600 font-bold text-[9px] uppercase tracking-[0.2em] transition-colors">{t['welcome']}</a>
+            <div className="flex items-center space-x-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+              <Languages className="h-3.5 w-3.5 text-slate-400" />
+              <select 
+                value={currentLanguage} 
+                onChange={(e) => onLanguageChange(e.target.value as Language)}
+                className="bg-transparent text-[9px] font-black uppercase outline-none border-none cursor-pointer"
+              >
+                {SUPPORTED_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <Button onClick={onGetStarted} className="rounded-2xl px-8 font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-100">Entrar</Button>
