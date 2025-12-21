@@ -5,11 +5,49 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY || '';
 const USE_REAL_DB = !!(SUPABASE_URL && SUPABASE_KEY);
 
+// Almacenamiento seguro para evitar QuotaExceededError
+const safeStorage = {
+  getItem: (key: string) => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      console.warn("LocalStorage full, clearing older Supabase keys...");
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('sb-')) localStorage.removeItem(k);
+      });
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        console.error("Critical: Storage still full after cleanup.");
+      }
+    }
+  },
+  removeItem: (key: string) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  }
+};
+
 let supabase: SupabaseClient | null = null;
 
 if (USE_REAL_DB) {
   try {
-    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        storage: safeStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
   } catch (e) {
     console.error("Failed to initialize Supabase:", e);
   }
@@ -26,12 +64,7 @@ class BackendService {
         password: password || 'default_pass' 
       });
 
-      if (authError) {
-        if (authError.message.includes("quota")) {
-          throw new Error("El almacenamiento de su navegador está lleno. Por favor, limpie su historial o use el modo incógnito.");
-        }
-        throw new Error(authError.message);
-      }
+      if (authError) throw new Error(authError.message);
 
       // 1. Obtener Perfil
       const { data: profile, error: profileError } = await supabase
@@ -40,9 +73,9 @@ class BackendService {
         .eq('id', authData.user.id)
         .single();
 
-      if (profileError) throw new Error("Perfil no encontrado. ¿Confirmó su correo?");
+      if (profileError) throw new Error("Perfil no encontrado. Verifique su conexión o confirme su correo.");
 
-      // 2. Obtener Círculos por separado para evitar fallos de join
+      // 2. Obtener Círculos
       const { data: circles } = await supabase
         .from('circles')
         .select('target_id')
@@ -64,7 +97,6 @@ class BackendService {
   ): Promise<User> {
     
     if (USE_REAL_DB && supabase) {
-      // 1. Registro en Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password: password || 'default_pass',
@@ -75,26 +107,25 @@ class BackendService {
             religion: religion,
             visibility: visibility,
             language: language,
-            avatar_url: avatarUrl
+            avatar_url: avatarUrl || `https://ui-avatars.com/api/?name=${firstName}`
           }
         }
       });
 
       if (authError) throw new Error(authError.message);
-      if (!authData.user) throw new Error("Error: No se pudo crear el usuario.");
+      if (!authData.user) throw new Error("No se pudo crear el usuario.");
 
       const userId = authData.user.id;
       const session = authData.session;
 
+      // Si no hay sesión inmediata (por confirmación de email)
       if (!session) {
-        throw new Error("¡Registro casi listo! Por favor, confirma tu correo para activar tu perfil.");
+        throw new Error("¡Registro exitoso! Por favor, revisa tu correo para confirmar tu cuenta. El perfil se activará tras la confirmación.");
       }
       
-      // 2. Sincronización de Perfil con reintentos
+      // Sincronización robusta del perfil
       let profile = null;
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 1200));
-
+      for (let i = 0; i < 15; i++) { // 15 intentos (aprox 20-30 seg)
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -106,9 +137,10 @@ class BackendService {
           break;
         }
 
-        // Respaldo manual si falla el trigger
+        // Respaldo manual forzado tras el 3er intento
         if (i === 3 && !profile) {
-          await supabase.from('profiles').upsert({
+          console.warn("Trigger bypass: forzando creación de perfil desde el cliente...");
+          const { data: manualData, error: manualError } = await supabase.from('profiles').upsert({
             id: userId,
             email: email,
             first_name: firstName,
@@ -117,18 +149,23 @@ class BackendService {
             visibility: visibility,
             language: language,
             avatar_url: avatarUrl || `https://ui-avatars.com/api/?name=${firstName}`
-          });
+          }).select().single();
+          
+          if (manualData && !manualError) {
+            profile = manualData;
+            break;
+          }
         }
+        await new Promise(r => setTimeout(r, 1500));
       }
 
-      if (!profile) throw new Error("Error de sincronización. Por favor, intenta iniciar sesión.");
+      if (!profile) throw new Error("El usuario fue creado pero el perfil no pudo sincronizarse. Intente iniciar sesión.");
 
       const newUser = this.mapDbUserToUser(profile);
       this.currentUser = newUser;
       return newUser;
     }
 
-    // Mock Fallback
     const mockUser: User = {
       id: `u${Date.now()}`,
       name: `${firstName} ${lastName}`,
@@ -152,7 +189,7 @@ class BackendService {
         if (data.religion) dbUpdate.religion = data.religion;
 
         const { error } = await supabase.from('profiles').update(dbUpdate).eq('id', userId);
-        if (error) throw new Error("Error de actualización.");
+        if (error) throw new Error("Error al actualizar perfil.");
       }
       this.currentUser = { ...this.currentUser, ...data };
       return this.currentUser;
