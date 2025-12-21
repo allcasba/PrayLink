@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -34,7 +33,7 @@
       }
     </style>
     <script>
-      // Polyfill para process.env en el navegador para evitar errores de referencia
+      // Polyfill para process.env
       if (typeof window !== 'undefined') {
         window.process = {
           env: {
@@ -44,6 +43,20 @@
             API_KEY: ''
           }
         };
+
+        // EMERGENCIA: Si el almacenamiento está lleno, limpiar claves antiguas de Supabase
+        try {
+          localStorage.setItem('__test__', '1');
+          localStorage.removeItem('__test__');
+        } catch (e) {
+          console.warn("Storage is full, attempting emergency cleanup...");
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.includes('sb-')) {
+              localStorage.removeItem(key);
+            }
+          }
+        }
       }
     </script>
   <script type="importmap">
@@ -65,7 +78,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection-indigo">
     <div id="root"></div>
